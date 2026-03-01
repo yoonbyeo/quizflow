@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, RotateCcw, Trophy } from 'lucide-react';
 import { shuffleArray, checkWrittenAnswer } from '../utils';
+import { saveLastMode } from './FlashcardPage';
 import type { CardSet } from '../types';
 
 interface WritePageProps {
@@ -13,6 +14,8 @@ export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
+
+  if (id) saveLastMode(id, 'write');
 
   const [cards] = useState(() => set ? shuffleArray([...set.cards]) : []);
   const [idx, setIdx] = useState(0);

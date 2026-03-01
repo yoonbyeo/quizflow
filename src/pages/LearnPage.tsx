@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Brain, AlertCircle } from 'lucide-react';
 import { generateMultipleChoiceQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
+import { saveLastMode } from './FlashcardPage';
 import type { CardSet, CardStat, TestQuestion } from '../types';
 
 interface LearnPageProps {
@@ -27,6 +28,8 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
+
+  if (id) saveLastMode(id, 'learn');
 
   const [config, setConfig] = useState<LearnConfig>({
     includeFlashcard: true,

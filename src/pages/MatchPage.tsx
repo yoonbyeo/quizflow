@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Trophy, RotateCcw, Timer } from 'lucide-react';
 import { shuffleArray } from '../utils';
+import { saveLastMode } from './FlashcardPage';
 import type { CardSet } from '../types';
 
 interface MatchPageProps {
@@ -21,6 +22,8 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
+
+  if (id) saveLastMode(id, 'match');
 
   const initItems = useMemo<MatchItem[]>(() => {
     if (!set) return [];

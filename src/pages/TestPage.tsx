@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
+import { saveLastMode } from './FlashcardPage';
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
@@ -32,6 +33,8 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
+
+  if (id) saveLastMode(id, 'test');
 
   const [config, setConfig] = useState<TestConfig>(DEFAULT_CONFIG);
   const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');

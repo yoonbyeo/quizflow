@@ -1,8 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { loadProgress } from './FlashcardPage';
+import { loadProgress, loadLastMode } from './FlashcardPage';
 import type { CardSet, CardStat, Folder } from '../types';
+
+// 모드 → 경로/라벨/색상 매핑
+const MODE_META = {
+  flashcard: { label: '플래시카드', color: 'var(--blue)', path: (id: string) => `/flashcard/${id}` },
+  learn:     { label: '학습하기',   color: 'var(--purple)', path: (id: string) => `/learn/${id}` },
+  test:      { label: '테스트',     color: 'var(--green)', path: (id: string) => `/test/${id}` },
+  match:     { label: '매칭',       color: 'var(--yellow)', path: (id: string) => `/match/${id}` },
+  write:     { label: '쓰기',       color: '#f0883e', path: (id: string) => `/write/${id}` },
+} as const;
 
 interface HomePageProps {
   cardSets: CardSet[];
@@ -161,70 +170,83 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
-      {/* ── 진행 중인 세트 ── */}
+      {/* ── 멈춘 지점에서 계속하기 ── */}
       {inProgress.length > 0 && (
         <section style={{ marginBottom: 36 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-2)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Brain size={16} color="var(--purple)" /> 멈춘 지점에서 계속하기
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {inProgress.map(set => {
               const cardStatMap = set.studyStats?.cardStats ?? {};
               const total = set.cards.length;
 
-              // 한 번이라도 학습한 카드 수 (진행도)
+              // 학습 통계
               const studied = set.cards.filter(c => cardStatMap[c.id]).length;
-              // 숙달 카드 수 (easy)
-              const mastered = Object.values(cardStatMap).filter((s: any) => s.difficulty === 'easy').length;
-
-              // 플래시카드 진행 인덱스 (localStorage)
+              const mastered = (Object.values(cardStatMap) as any[]).filter(s => s.difficulty === 'easy').length;
               const savedIdx = loadProgress(set.id);
-              // savedIdx+1 vs studied 중 큰 값을 진행 카드 수로 사용
               const progressCards = Math.max(studied, Math.min(savedIdx + 1, total));
               const pct = total > 0 ? Math.round((progressCards / total) * 100) : 0;
+              const masteredPct = total > 0 ? Math.round((mastered / total) * 100) : 0;
 
-              // 계속하기 시작 위치: 마지막 카드까지 봤으면 처음부터
-              const startIdx = savedIdx >= total - 1 ? 0 : savedIdx;
+              // 마지막 학습 모드
+              const lastMode = loadLastMode(set.id) ?? 'flashcard';
+              const meta = MODE_META[lastMode];
+              const continuePath = lastMode === 'flashcard'
+                ? `${meta.path(set.id)}?start=${savedIdx >= total - 1 ? 0 : savedIdx}`
+                : meta.path(set.id);
 
               return (
-                <div key={set.id} className="card" style={{ padding: '20px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 20 }}
+                <div key={set.id} className="card card-hover"
+                  style={{ padding: '22px 24px', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
                   onClick={() => navigate(`/set/${set.id}`)}>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, var(--blue-bg), var(--purple-bg))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <BookOpen size={20} color="var(--blue)" />
+
+                  {/* 상단 모드 뱃지 */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, padding: '3px 9px', borderRadius: 99, border: `1px solid color-mix(in srgb, ${meta.color} 30%, transparent)` }}>
+                      {meta.label} 이어하기
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>
+                      {total}개 카드
+                    </span>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{set.title}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                        {progressCards}/{total}개 학습
+
+                  {/* 제목 */}
+                  <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 16, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {set.title}
+                  </div>
+
+                  {/* 진행도 바 (이중) */}
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ height: 8, background: 'var(--bg-3)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
+                      {/* 전체 학습 진행 */}
+                      <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'linear-gradient(90deg, #1f6feb, #6e40c9)', borderRadius: 99, transition: 'width .4s' }} />
+                      {/* 숙달 진행 (초록) */}
+                      {mastered > 0 && (
+                        <div style={{ position: 'absolute', inset: 0, width: `${masteredPct}%`, background: 'var(--green)', borderRadius: 99, opacity: 0.85 }} />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 진행 텍스트 */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>
+                      {pct}% 완료 · {progressCards}/{total}개 학습
+                    </span>
+                    {mastered > 0 && (
+                      <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
+                        ✓ {mastered}개 숙달
                       </span>
-                      {mastered > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>
-                          ✓ {mastered}개 숙달
-                        </span>
-                      )}
-                    </div>
-                    {/* 이중 레이어 진행바: 학습(파랑) 위에 숙달(초록) */}
-                    <div className="progress-track" style={{ position: 'relative' }}>
-                      <div className="progress-fill" style={{ width: `${pct}%` }} />
-                      {mastered > 0 && (
-                        <div style={{
-                          position: 'absolute', top: 0, left: 0, height: '100%',
-                          width: `${Math.round((mastered / total) * 100)}%`,
-                          background: 'var(--green)', borderRadius: 99, opacity: 0.8,
-                        }} />
-                      )}
-                    </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button className="btn btn-primary btn-sm"
-                      onClick={e => {
-                        e.stopPropagation();
-                        navigate(`/flashcard/${set.id}?start=${startIdx}`);
-                      }}>
-                      계속하기
-                    </button>
-                  </div>
+
+                  {/* 계속하기 버튼 */}
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ background: `linear-gradient(135deg, ${meta.color}, color-mix(in srgb, ${meta.color} 70%, #6e40c9))` }}
+                    onClick={e => { e.stopPropagation(); navigate(continuePath); }}>
+                    계속하기
+                  </button>
                 </div>
               );
             })}

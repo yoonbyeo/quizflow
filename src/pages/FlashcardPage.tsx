@@ -17,11 +17,23 @@ export function loadProgress(setId: string): number {
   try { return parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0; } catch { return 0; }
 }
 
+// 마지막 학습 모드 저장/불러오기
+export type LastMode = 'flashcard' | 'learn' | 'test' | 'match' | 'write';
+export function saveLastMode(setId: string, mode: LastMode) {
+  try { localStorage.setItem(`qf-lastmode-${setId}`, mode); } catch {}
+}
+export function loadLastMode(setId: string): LastMode | null {
+  try { return (localStorage.getItem(`qf-lastmode-${setId}`) as LastMode) || null; } catch { return null; }
+}
+
 export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
+
+  // 진입 시 마지막 모드 저장
+  if (id) saveLastMode(id, 'flashcard');
 
   const [cards, setCards] = useState(() => set ? [...set.cards] : []);
   const paramIdx = parseInt(searchParams.get('start') ?? '-1', 10);
