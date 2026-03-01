@@ -1,21 +1,26 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ChevronLeft, Zap } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, Zap, Image, X } from 'lucide-react';
 import type { Folder } from '../types';
 
 interface CreateSetPageProps {
-  onCreate: (title: string, description?: string, category?: string, cards?: { term: string; definition: string; hint?: string }[], folderId?: string) => Promise<unknown>;
+  onCreate: (title: string, description?: string, category?: string, cards?: { term: string; definition: string; hint?: string; imageUrl?: string }[], folderId?: string) => Promise<unknown>;
   folders: Folder[];
+  onUploadImage?: (file: File) => Promise<string | null>;
 }
 
 interface DraftCard {
   term: string;
   definition: string;
   hint: string;
+  imageUrl?: string;
+  uploading?: boolean;
 }
 
-export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps) {
+export default function CreateSetPage({ onCreate, folders, onUploadImage }: CreateSetPageProps) {
   const navigate = useNavigate();
+  const fileRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -32,6 +37,13 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
   const updateCard = (i: number, field: keyof DraftCard, value: string) =>
     setCards(c => c.map((card, idx) => idx === i ? { ...card, [field]: value } : card));
 
+  const handleImageUpload = async (i: number, file: File) => {
+    if (!onUploadImage) return;
+    setCards(c => c.map((card, idx) => idx === i ? { ...card, uploading: true } : card));
+    const url = await onUploadImage(file);
+    setCards(c => c.map((card, idx) => idx === i ? { ...card, imageUrl: url ?? undefined, uploading: false } : card));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { setError('제목을 입력하세요.'); return; }
@@ -39,7 +51,13 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
     if (validCards.length === 0) { setError('카드를 최소 1개 이상 추가하세요.'); return; }
     setLoading(true); setError('');
     try {
-      const result = await onCreate(title.trim(), description.trim() || undefined, category.trim() || undefined, validCards, folderId || undefined);
+      const result = await onCreate(
+        title.trim(),
+        description.trim() || undefined,
+        category.trim() || undefined,
+        validCards.map(c => ({ term: c.term, definition: c.definition, hint: c.hint || undefined, imageUrl: c.imageUrl })),
+        folderId || undefined
+      );
       if (result && (result as { id?: string }).id) {
         navigate(`/set/${(result as { id: string }).id}`);
       } else {
@@ -62,13 +80,14 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* Set info */}
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>제목 *</label>
               <input type="text" className="input" placeholder="예: 영어 단어 - Chapter 1" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${folders.length > 0 ? 3 : 2}, 1fr)`, gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>카테고리</label>
                 <input type="text" className="input" placeholder="예: 영어, 역사..." value={category} onChange={e => setCategory(e.target.value)} />
@@ -92,6 +111,7 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
 
         {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
+        {/* Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
           {cards.map((card, i) => (
             <div key={i} className="card-row">
@@ -104,6 +124,7 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
                   </button>
                 )}
               </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>용어</label>
@@ -114,9 +135,44 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
                   <input type="text" className="input" placeholder="정의 입력..." value={card.definition} onChange={e => updateCard(i, 'definition', e.target.value)} />
                 </div>
               </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>힌트 (선택)</label>
-                <input type="text" className="input" placeholder="힌트..." value={card.hint} onChange={e => updateCard(i, 'hint', e.target.value)} />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start' }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>힌트 (선택)</label>
+                  <input type="text" className="input" placeholder="힌트..." value={card.hint} onChange={e => updateCard(i, 'hint', e.target.value)} />
+                </div>
+
+                {/* Image */}
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>이미지</label>
+                  {card.imageUrl ? (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={card.imageUrl} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', display: 'block' }} />
+                      <button type="button"
+                        onClick={() => setCards(c => c.map((ca, idx) => idx === i ? { ...ca, imageUrl: undefined } : ca))}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, background: 'var(--red)', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <X size={10} color="#fff" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        ref={el => { fileRefs.current[i] = el; }}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(i, f); }} />
+                      <button type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => fileRefs.current[i]?.click()}
+                        disabled={card.uploading || !onUploadImage}
+                        title={!onUploadImage ? 'Storage 설정 필요' : '이미지 추가'}
+                        style={{ width: 56, height: 56, padding: 0, flexDirection: 'column', gap: 2, fontSize: 10 }}>
+                        {card.uploading
+                          ? <span style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin .6s linear infinite' }} />
+                          : <><Image size={16} /><span>추가</span></>
+                        }
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -127,7 +183,9 @@ export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps)
             <Plus size={15} /> 카드 추가
           </button>
           <button type="submit" className="btn btn-primary btn-md" disabled={loading}>
-            {loading ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} /> : <Zap size={15} />}
+            {loading
+              ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
+              : <Zap size={15} />}
             세트 저장
           </button>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
@@ -17,26 +17,25 @@ const DEFAULT_CONFIG: TestConfig = {
   includeTrueFalse: false,
 };
 
+function buildQuestions(set: { cards: CardSet['cards'] }, config: TestConfig): TestQuestion[] {
+  const shuffled = shuffleArray([...set.cards]).slice(0, config.questionCount);
+  return shuffled.map((card, i) => {
+    const canMC = config.includeMultipleChoice && set.cards.length >= 4;
+    const canW = config.includeWritten;
+    if (canMC && canW) return i % 2 === 0 ? generateMultipleChoiceQuestion(card, set.cards) : generateWrittenQuestion(card);
+    if (canMC) return generateMultipleChoiceQuestion(card, set.cards);
+    return generateWrittenQuestion(card);
+  });
+}
+
 export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
 
   const [config, setConfig] = useState<TestConfig>(DEFAULT_CONFIG);
-  const [configOpen, setConfigOpen] = useState(true);
-  const [started, setStarted] = useState(false);
-
-  const questions = useMemo<TestQuestion[]>(() => {
-    if (!set || set.cards.length < 2 || !started) return [];
-    const shuffled = shuffleArray([...set.cards]).slice(0, config.questionCount);
-    return shuffled.map((card, i) => {
-      const useWritten = config.includeWritten && (!config.includeMultipleChoice || i % 2 === 1);
-      const useMC = config.includeMultipleChoice && set.cards.length >= 4;
-      if (useWritten && !useMC) return generateWrittenQuestion(card);
-      if (useMC && !useWritten) return generateMultipleChoiceQuestion(card, set.cards);
-      return i % 2 === 0 ? generateMultipleChoiceQuestion(card, set.cards) : generateWrittenQuestion(card);
-    });
-  }, [set, config, started]);
+  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');
+  const [questions, setQuestions] = useState<TestQuestion[]>([]);
 
   const [qIdx, setQIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -44,7 +43,6 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [score, setScore] = useState(0);
-  const [finished, setFinished] = useState(false);
   const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
 
@@ -57,8 +55,29 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
-  // Config screen
-  if (configOpen && !started) {
+  const startQuiz = () => {
+    const qs = buildQuestions(set, config);
+    setQuestions(qs);
+    setQIdx(0);
+    setSelected(null);
+    setWritten('');
+    setSubmitted(false);
+    setScore(0);
+    setAnswers([]);
+    setScreen('quiz');
+  };
+
+  const resetToConfig = () => {
+    setScreen('config');
+    setQuestions([]);
+    setQIdx(0);
+    setScore(0);
+    setAnswers([]);
+    setShowReview(false);
+  };
+
+  // ── Config screen ──
+  if (screen === 'config') {
     const maxQ = Math.min(set.cards.length, 20);
     return (
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -73,10 +92,12 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
               문제 수 (최대 {maxQ})
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <input type="range" min={2} max={maxQ} value={config.questionCount}
+              <input type="range" min={2} max={maxQ} value={Math.min(config.questionCount, maxQ)}
                 onChange={e => setConfig(c => ({ ...c, questionCount: +e.target.value }))}
                 style={{ flex: 1, accentColor: 'var(--blue)' }} />
-              <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--blue)', minWidth: 28, textAlign: 'center' }}>{config.questionCount}</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--blue)', minWidth: 32, textAlign: 'center' }}>
+                {Math.min(config.questionCount, maxQ)}
+              </span>
             </div>
           </div>
 
@@ -90,24 +111,25 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
             </div>
           </div>
 
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 28 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>문제 유형</label>
             {[
-              { key: 'includeMultipleChoice', label: '객관식', disabled: set.cards.length < 4 },
-              { key: 'includeWritten', label: '주관식 (단답형)', disabled: false },
-            ].map(({ key, label, disabled }) => (
-              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1 }}>
-                <input type="checkbox" checked={(config as any)[key]} disabled={disabled}
+              { key: 'includeMultipleChoice', label: '객관식', sub: '보기 중 선택', disabled: set.cards.length < 4, disabledMsg: '카드 4개 이상 필요' },
+              { key: 'includeWritten', label: '주관식', sub: '직접 입력', disabled: false, disabledMsg: '' },
+            ].map(({ key, label, sub, disabled, disabledMsg }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 8, background: 'var(--bg-2)', borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, border: `1px solid ${(config as any)[key] && !disabled ? 'var(--blue)' : 'var(--border)'}` }}>
+                <input type="checkbox" checked={(config as any)[key] && !disabled} disabled={disabled}
                   onChange={e => setConfig(c => ({ ...c, [key]: e.target.checked }))}
-                  style={{ width: 16, height: 16, accentColor: 'var(--blue)' }} />
-                <span style={{ fontSize: 14 }}>{label}</span>
-                {disabled && <span className="badge badge-gray">카드 4개 이상 필요</span>}
+                  style={{ width: 16, height: 16, accentColor: 'var(--blue)', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{disabled ? disabledMsg : sub}</div>
+                </div>
               </label>
             ))}
           </div>
 
-          <button className="btn btn-primary btn-lg" style={{ width: '100%' }}
-            onClick={() => { setStarted(true); setConfigOpen(false); setQIdx(0); setScore(0); setFinished(false); setAnswers([]); }}
+          <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={startQuiz}
             disabled={!config.includeMultipleChoice && !config.includeWritten}>
             테스트 시작
           </button>
@@ -116,9 +138,9 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
-  // Result screen
-  if (finished) {
-    const pct = Math.round((score / questions.length) * 100);
+  // ── Result screen ──
+  if (screen === 'result') {
+    const pct = questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
@@ -139,7 +161,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
           <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={() => setShowReview(!showReview)}>
             {showReview ? '답안 숨기기' : '답안 검토'}
           </button>
-          <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={() => { setStarted(false); setConfigOpen(true); setFinished(false); setScore(0); setAnswers([]); }}>
+          <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={resetToConfig}>
             <RotateCcw size={15} /> 다시 설정
           </button>
           <button className="btn btn-primary btn-md" style={{ flex: 1 }} onClick={() => navigate(`/set/${id}`)}>세트로</button>
@@ -163,12 +185,15 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
+  // ── Quiz screen ──
+  if (questions.length === 0 || qIdx >= questions.length) return null;
+
   const q = questions[qIdx];
-  if (!q) return null;
   const isWritten = q.type === 'written';
-  const pct = Math.round((qIdx / questions.length) * 100);
+  const progressPct = Math.round((qIdx / questions.length) * 100);
 
   const submit = async () => {
+    if (submitted) return;
     const answer = isWritten ? written : selected ?? '';
     const isCorrect = isWritten ? checkWrittenAnswer(written, q.correctAnswer) : answer === q.correctAnswer;
     setCorrect(isCorrect);
@@ -179,14 +204,21 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   };
 
   const next = () => {
-    if (qIdx + 1 >= questions.length) { setFinished(true); return; }
-    setQIdx(i => i + 1); setSelected(null); setWritten(''); setSubmitted(false);
+    if (qIdx + 1 >= questions.length) {
+      setScreen('result');
+      return;
+    }
+    setQIdx(i => i + 1);
+    setSelected(null);
+    setWritten('');
+    setSubmitted(false);
+    setCorrect(false);
   };
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setStarted(false); setConfigOpen(true); }} style={{ gap: 4 }}>
+        <button className="btn btn-ghost btn-sm" onClick={resetToConfig} style={{ gap: 4 }}>
           <Settings size={14} /> 설정
         </button>
         <span style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{qIdx + 1} / {questions.length}</span>
@@ -194,7 +226,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
       </div>
 
       <div className="progress-track" style={{ marginBottom: 24 }}>
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+        <div className="progress-fill" style={{ width: `${progressPct}%` }} />
       </div>
 
       <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
@@ -209,19 +241,24 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
         {isWritten ? (
           <input type="text" className="input" placeholder="답을 입력하세요..." value={written}
             onChange={e => setWritten(e.target.value)} disabled={submitted}
-            onKeyDown={e => { if (e.key === 'Enter' && !submitted && written.trim()) submit(); }} autoFocus />
+            onKeyDown={e => { if (e.key === 'Enter' && !submitted && written.trim()) submit(); }}
+            autoFocus />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {(q.options ?? []).map((opt, i) => {
               let bg = 'var(--bg-2)', border = 'var(--border)', color = 'var(--text-1)';
               if (submitted) {
                 if (opt === q.correctAnswer) { bg = 'var(--green-bg)'; border = 'rgba(63,185,80,.4)'; color = 'var(--green)'; }
-                else if (opt === selected) { bg = 'var(--red-bg)'; border = 'rgba(248,81,73,.4)'; color = 'var(--red)'; }
-              } else if (opt === selected) { bg = 'var(--blue-bg)'; border = 'var(--blue)'; color = 'var(--blue)'; }
+                else if (opt === selected && opt !== q.correctAnswer) { bg = 'var(--red-bg)'; border = 'rgba(248,81,73,.4)'; color = 'var(--red)'; }
+              } else if (opt === selected) {
+                bg = 'var(--blue-bg)'; border = 'var(--blue)'; color = 'var(--blue)';
+              }
               return (
-                <button key={i} onClick={() => !submitted && setSelected(opt)} disabled={submitted}
+                <button key={i}
+                  onClick={() => { if (!submitted) setSelected(opt); }}
+                  disabled={submitted}
                   style={{ padding: '14px 18px', background: bg, border: `1px solid ${border}`, borderRadius: 10, cursor: submitted ? 'default' : 'pointer', color, fontWeight: 500, textAlign: 'left', fontSize: 14, transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: border === 'var(--border)' ? 'var(--bg-3)' : 'transparent', border: `1px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0, color }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', border: `1px solid ${border}`, background: opt === selected || (submitted && opt === q.correctAnswer) ? 'transparent' : 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0, color }}>
                     {String.fromCharCode(65 + i)}
                   </span>
                   {opt}
@@ -242,10 +279,16 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
         </div>
       )}
 
-      {!submitted
-        ? <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submit} disabled={isWritten ? !written.trim() : !selected}>제출</button>
-        : <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={next}>{qIdx + 1 >= questions.length ? '결과 보기' : '다음 문제'} →</button>
-      }
+      {!submitted ? (
+        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submit}
+          disabled={isWritten ? !written.trim() : !selected}>
+          제출
+        </button>
+      ) : (
+        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={next}>
+          {qIdx + 1 >= questions.length ? '결과 보기' : '다음 문제'} →
+        </button>
+      )}
     </div>
   );
 }

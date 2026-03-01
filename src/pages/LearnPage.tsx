@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Brain } from 'lucide-react';
-import { shuffleArray, checkWrittenAnswer } from '../utils';
+import { generateMultipleChoiceQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import type { CardSet, CardStat } from '../types';
 
 interface LearnPageProps {
@@ -9,16 +9,56 @@ interface LearnPageProps {
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
 }
 
-type Phase = 'flashcard' | 'written' | 'done';
+type Screen = 'config' | 'flash' | 'practice' | 'result';
+
+interface LearnConfig {
+  includeFlashcard: boolean;
+  includeMultipleChoice: boolean;
+  includeWritten: boolean;
+}
 
 export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
 
-  // Sort cards: hard/unrated first, then medium, then easy
-  const sortedCards = useMemo(() => {
-    if (!set) return [];
+  const [config, setConfig] = useState<LearnConfig>({
+    includeFlashcard: true,
+    includeMultipleChoice: true,
+    includeWritten: true,
+  });
+  const [screen, setScreen] = useState<Screen>('config');
+
+  // Sorted cards (hard first)
+  const [sortedCards, setSortedCards] = useState<CardSet['cards']>([]);
+
+  // Flash state
+  const [flashIdx, setFlashIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [flashResults, setFlashResults] = useState<boolean[]>([]);
+
+  // Practice state (MC + Written combined)
+  const [practiceItems, setPracticeItems] = useState<{ card: CardSet['cards'][0]; type: 'mc' | 'written' }[]>([]);
+  const [practiceIdx, setPracticeIdx] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [written, setWritten] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [practiceScore, setPracticeScore] = useState(0);
+
+  // Result
+  const [flashScore, setFlashScore] = useState(0);
+
+  if (!set || set.cards.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <p style={{ color: 'var(--text-2)', marginBottom: 16 }}>카드가 없습니다.</p>
+        <button className="btn btn-secondary btn-md" onClick={() => navigate(-1)}>돌아가기</button>
+      </div>
+    );
+  }
+
+  const buildSorted = () => {
     const priority = (c: CardStat | undefined) => {
       if (!c || c.difficulty === 'unrated') return 0;
       if (c.difficulty === 'hard') return 1;
@@ -29,80 +69,112 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       priority(set.studyStats?.cardStats?.[a.id] as CardStat | undefined) -
       priority(set.studyStats?.cardStats?.[b.id] as CardStat | undefined)
     );
-  }, [set]);
+  };
 
-  const [phase, setPhase] = useState<Phase>('flashcard');
-  const [idx, setIdx] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [input, setInput] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [correct, setCorrect] = useState(false);
-  const [flashCorrect, setFlashCorrect] = useState<boolean[]>([]);
-  const [writtenScore, setWrittenScore] = useState(0);
-  const [writtenTotal, setWrittenTotal] = useState(0);
+  const buildPracticeItems = (cards: CardSet['cards']) => {
+    const items: { card: CardSet['cards'][0]; type: 'mc' | 'written' }[] = [];
+    cards.forEach((card, i) => {
+      const canMC = config.includeMultipleChoice && set.cards.length >= 4;
+      const canW = config.includeWritten;
+      if (canMC && canW) {
+        items.push({ card, type: i % 2 === 0 ? 'mc' : 'written' });
+      } else if (canMC) {
+        items.push({ card, type: 'mc' });
+      } else if (canW) {
+        items.push({ card, type: 'written' });
+      }
+    });
+    return items;
+  };
 
-  if (!set || sortedCards.length === 0) {
+  const startLearn = () => {
+    const cards = buildSorted();
+    setSortedCards(cards);
+    setFlashResults([]);
+    setFlashScore(0);
+    setPracticeScore(0);
+    setPracticeIdx(0);
+    setSubmitted(false);
+    setSelected(null);
+    setWritten('');
+    setFlipped(false);
+    setFlashIdx(0);
+
+    if (config.includeFlashcard) {
+      setScreen('flash');
+    } else {
+      const items = buildPracticeItems(cards);
+      setPracticeItems(items);
+      setScreen('practice');
+    }
+  };
+
+
+  // ── Config ──
+  if (screen === 'config') {
     return (
-      <div style={{ textAlign: 'center', padding: '80px 0' }}>
-        <p style={{ color: 'var(--text-2)', marginBottom: 16 }}>카드가 없습니다.</p>
-        <button className="btn btn-secondary btn-md" onClick={() => navigate(-1)}>돌아가기</button>
+      <div style={{ maxWidth: 480, margin: '0 auto' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ marginBottom: 20, gap: 4 }}>
+          <ChevronLeft size={15} /> {set.title}
+        </button>
+        <div className="card card-glow" style={{ padding: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <Brain size={20} color="var(--purple)" />
+            <h2 style={{ fontSize: 18, fontWeight: 800 }}>학습하기 설정</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 24 }}>어려운 카드를 우선으로 학습합니다</p>
+
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>학습 단계 선택</label>
+
+          {[
+            { key: 'includeFlashcard', label: '플래시카드', sub: '카드를 보며 알고 있는지 확인', disabled: false },
+            { key: 'includeMultipleChoice', label: '객관식', sub: '보기 중 정답 선택', disabled: set.cards.length < 4, disabledMsg: '카드 4개 이상 필요' },
+            { key: 'includeWritten', label: '주관식', sub: '직접 정의 입력', disabled: false },
+          ].map(({ key, label, sub, disabled, disabledMsg }: any) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 8, background: 'var(--bg-2)', borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, border: `1px solid ${(config as any)[key] && !disabled ? 'var(--purple)' : 'var(--border)'}` }}>
+              <input type="checkbox" checked={(config as any)[key] && !disabled} disabled={disabled}
+                onChange={e => setConfig(c => ({ ...c, [key]: e.target.checked }))}
+                style={{ width: 16, height: 16, accentColor: 'var(--purple)', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{disabled ? disabledMsg : sub}</div>
+              </div>
+            </label>
+          ))}
+
+          <button className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: 20, background: 'linear-gradient(135deg, var(--purple), var(--blue))' }}
+            onClick={startLearn}
+            disabled={!config.includeFlashcard && !config.includeMultipleChoice && !config.includeWritten}>
+            학습 시작
+          </button>
+        </div>
       </div>
     );
   }
 
-  const card = sortedCards[idx];
-  const totalCards = sortedCards.length;
-  const pct = Math.round((idx / totalCards) * 100);
+  // ── Result ──
+  if (screen === 'result') {
+    const flashTotal = config.includeFlashcard ? sortedCards.length : 0;
+    const practiceTotal = practiceItems.length;
+    const flashPct = flashTotal > 0 ? Math.round((flashScore / flashTotal) * 100) : null;
+    const practicePct = practiceTotal > 0 ? Math.round((practiceScore / practiceTotal) * 100) : null;
+    const overall = [flashPct, practicePct].filter(v => v !== null) as number[];
+    const avgPct = overall.length > 0 ? Math.round(overall.reduce((a, b) => a + b, 0) / overall.length) : 0;
 
-  // Phase 1: Flashcard review
-  const rateFlash = async (knew: boolean) => {
-    setFlashCorrect(prev => [...prev, knew]);
-    await onUpdateStat(card.id, knew);
-    if (idx + 1 >= totalCards) {
-      setPhase('written');
-      setIdx(0);
-      setFlipped(false);
-    } else {
-      setIdx(i => i + 1);
-      setFlipped(false);
-    }
-  };
-
-  // Phase 2: Written
-  const submitWritten = async () => {
-    const isCorrect = checkWrittenAnswer(input, card.definition);
-    setCorrect(isCorrect);
-    setSubmitted(true);
-    if (isCorrect) setWrittenScore(s => s + 1);
-    setWrittenTotal(t => t + 1);
-    await onUpdateStat(card.id, isCorrect);
-  };
-
-  const nextWritten = () => {
-    if (idx + 1 >= totalCards) { setPhase('done'); return; }
-    setIdx(i => i + 1); setInput(''); setSubmitted(false);
-  };
-
-  // Done
-  if (phase === 'done') {
-    const flashKnew = flashCorrect.filter(Boolean).length;
-    const flashPct = Math.round((flashKnew / totalCards) * 100);
-    const writePct = writtenTotal > 0 ? Math.round((writtenScore / writtenTotal) * 100) : 0;
-    const overall = Math.round((flashPct + writePct) / 2);
     return (
       <div style={{ maxWidth: 480, margin: '60px auto', textAlign: 'center' }}>
-        <div style={{ width: 80, height: 80, background: overall >= 70 ? 'var(--green-bg)' : 'var(--blue-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <Trophy size={32} color={overall >= 70 ? 'var(--green)' : 'var(--blue)'} />
+        <div style={{ width: 80, height: 80, background: avgPct >= 70 ? 'var(--green-bg)' : 'var(--blue-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <Trophy size={32} color={avgPct >= 70 ? 'var(--green)' : 'var(--blue)'} />
         </div>
         <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>학습 완료!</h2>
         <p style={{ color: 'var(--text-2)', marginBottom: 24 }}>오늘의 학습 세션이 끝났습니다</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
-          <div className="stat-card"><div className="stat-value" style={{ color: 'var(--blue)', fontSize: 22 }}>{flashPct}%</div><div className="stat-label">플래시카드</div></div>
-          <div className="stat-card"><div className="stat-value" style={{ color: 'var(--purple)', fontSize: 22 }}>{writePct}%</div><div className="stat-label">쓰기</div></div>
-          <div className="stat-card"><div className="stat-value" style={{ color: overall >= 70 ? 'var(--green)' : 'var(--yellow)', fontSize: 22 }}>{overall}%</div><div className="stat-label">종합</div></div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${overall.length + 1}, 1fr)`, gap: 12, marginBottom: 24 }}>
+          {flashPct !== null && <div className="stat-card"><div className="stat-value" style={{ color: 'var(--blue)', fontSize: 22 }}>{flashPct}%</div><div className="stat-label">플래시카드</div></div>}
+          {practicePct !== null && <div className="stat-card"><div className="stat-value" style={{ color: 'var(--purple)', fontSize: 22 }}>{practicePct}%</div><div className="stat-label">연습</div></div>}
+          <div className="stat-card"><div className="stat-value" style={{ color: avgPct >= 70 ? 'var(--green)' : 'var(--yellow)', fontSize: 22 }}>{avgPct}%</div><div className="stat-label">종합</div></div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button className="btn btn-secondary btn-md" onClick={() => { setPhase('flashcard'); setIdx(0); setFlipped(false); setFlashCorrect([]); setWrittenScore(0); setWrittenTotal(0); }}>
+          <button className="btn btn-secondary btn-md" onClick={() => { setScreen('config'); }}>
             <RotateCcw size={15} /> 다시
           </button>
           <button className="btn btn-primary btn-md" onClick={() => navigate(`/set/${id}`)}>세트로</button>
@@ -111,89 +183,211 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     );
   }
 
-  return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
-          <ChevronLeft size={15} /> {set.title}
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Brain size={16} color="var(--purple)" />
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)' }}>
-            {phase === 'flashcard' ? '1단계: 플래시카드' : '2단계: 쓰기 연습'}
-          </span>
+  // ── Flash phase ──
+  if (screen === 'flash') {
+    const card = sortedCards[flashIdx];
+    if (!card) return null;
+    const total = sortedCards.length;
+
+    const rateFlash = async (knew: boolean) => {
+      const newResults = [...flashResults, knew];
+      setFlashResults(newResults);
+      await onUpdateStat(card.id, knew);
+      if (flashIdx + 1 >= total) {
+        const knew2 = newResults.filter(Boolean).length;
+        setFlashScore(knew2);
+        if (config.includeMultipleChoice || config.includeWritten) {
+          const items = buildPracticeItems(sortedCards);
+          setPracticeItems(items);
+          setPracticeIdx(0);
+          setSubmitted(false);
+          setSelected(null);
+          setWritten('');
+          setScreen('practice');
+        } else {
+          setScreen('result');
+        }
+      } else {
+        setFlashIdx(i => i + 1);
+        setFlipped(false);
+      }
+    };
+
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
+            <ChevronLeft size={15} /> {set.title}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Brain size={16} color="var(--purple)" />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)' }}>1단계: 플래시카드</span>
+          </div>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{flashIdx + 1} / {total}</span>
         </div>
-        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{idx + 1} / {totalCards}</span>
-      </div>
 
-      {/* Phase indicator */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {(['flashcard', 'written'] as Phase[]).map((p, i) => (
-          <div key={p} style={{ flex: 1, height: 4, borderRadius: 99, background: phase === p ? 'var(--purple)' : (i === 0 && phase === 'written') ? 'var(--green)' : 'var(--bg-3)', transition: 'background .3s' }} />
-        ))}
-      </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--purple)' }} />
+          {(config.includeMultipleChoice || config.includeWritten) && <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--bg-3)' }} />}
+        </div>
+        <div className="progress-track" style={{ marginBottom: 24 }}>
+          <div className="progress-fill" style={{ width: `${(flashIdx / total) * 100}%`, background: 'linear-gradient(90deg, var(--purple), var(--blue))' }} />
+        </div>
 
-      <div className="progress-track" style={{ marginBottom: 24 }}>
-        <div className="progress-fill" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--purple), var(--blue))' }} />
-      </div>
-
-      {/* Flashcard phase */}
-      {phase === 'flashcard' && (
-        <>
-          <div className="flip-card" style={{ height: 300, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
-            <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
-              <div className="flip-front">
-                <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>용어</div>
-                <p style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.4 }}>{card.term}</p>
-                {card.imageUrl && <img src={card.imageUrl} style={{ marginTop: 12, maxHeight: 80, borderRadius: 6, objectFit: 'contain' }} />}
-                {!flipped && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 20 }}>클릭하여 정의 보기</p>}
-              </div>
-              <div className="flip-back">
-                <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>정의</div>
-                <p style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.5 }}>{card.definition}</p>
-              </div>
+        <div className="flip-card" style={{ height: 300, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
+          <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
+            <div className="flip-front">
+              <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>용어</div>
+              <p style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.4 }}>{card.term}</p>
+              {card.imageUrl && <img src={card.imageUrl} style={{ marginTop: 12, maxHeight: 80, borderRadius: 6, objectFit: 'contain' }} />}
+              {!flipped && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 20 }}>클릭하여 정의 보기</p>}
+            </div>
+            <div className="flip-back">
+              <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>정의</div>
+              <p style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.5 }}>{card.definition}</p>
             </div>
           </div>
-          {flipped ? (
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-danger btn-md" style={{ flex: 1 }} onClick={() => rateFlash(false)}>
-                <XCircle size={15} /> 몰랐어요
-              </button>
-              <button className="btn btn-secondary btn-md" style={{ flex: 1, color: 'var(--green)', borderColor: 'rgba(63,185,80,.3)' }} onClick={() => rateFlash(true)}>
-                <CheckCircle size={15} /> 알았어요
-              </button>
+        </div>
+
+        {flipped ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-danger btn-md" style={{ flex: 1 }} onClick={() => rateFlash(false)}>
+              <XCircle size={15} /> 몰랐어요
+            </button>
+            <button className="btn btn-secondary btn-md" style={{ flex: 1, color: 'var(--green)', borderColor: 'rgba(63,185,80,.3)' }} onClick={() => rateFlash(true)}>
+              <CheckCircle size={15} /> 알았어요
+            </button>
+          </div>
+        ) : (
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>카드를 클릭해서 정의를 확인하세요</p>
+        )}
+      </div>
+    );
+  }
+
+  // ── Practice phase (MC + Written) ──
+  if (screen === 'practice') {
+    if (practiceItems.length === 0 || practiceIdx >= practiceItems.length) {
+      setScreen('result');
+      return null;
+    }
+
+    const { card, type } = practiceItems[practiceIdx];
+    const isMC = type === 'mc';
+    const mcQ = isMC ? generateMultipleChoiceQuestion(card, set.cards) : null;
+    const total = practiceItems.length;
+    const stepLabel = config.includeFlashcard
+      ? `2단계: ${isMC ? '객관식' : '주관식'} 연습`
+      : `${isMC ? '객관식' : '주관식'} 연습`;
+
+    const submitPractice = async () => {
+      if (submitted) return;
+      let isCorrect = false;
+      let userAnswer = '';
+      if (isMC) {
+        userAnswer = selected ?? '';
+        isCorrect = userAnswer === (mcQ?.correctAnswer ?? '');
+      } else {
+        userAnswer = written;
+        isCorrect = checkWrittenAnswer(written, card.definition);
+      }
+      setCorrect(isCorrect);
+      setSubmitted(true);
+      if (isCorrect) setPracticeScore(s => s + 1);
+      await onUpdateStat(card.id, isCorrect);
+    };
+
+    const nextPractice = () => {
+      if (practiceIdx + 1 >= total) {
+        setScreen('result');
+        return;
+      }
+      setPracticeIdx(i => i + 1);
+      setSelected(null);
+      setWritten('');
+      setSubmitted(false);
+      setCorrect(false);
+    };
+
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
+            <ChevronLeft size={15} /> {set.title}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Brain size={16} color="var(--purple)" />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--purple)' }}>{stepLabel}</span>
+          </div>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{practiceIdx + 1} / {total}</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {config.includeFlashcard && <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--green)' }} />}
+          <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--purple)' }} />
+        </div>
+        <div className="progress-track" style={{ marginBottom: 24 }}>
+          <div className="progress-fill" style={{ width: `${(practiceIdx / total) * 100}%`, background: 'linear-gradient(90deg, var(--purple), var(--blue))' }} />
+        </div>
+
+        <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
+          <div style={{ marginBottom: 16 }}>
+            <span className={`badge ${isMC ? 'badge-blue' : 'badge-purple'}`}>{isMC ? '객관식' : '주관식'}</span>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>용어</p>
+          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, lineHeight: 1.4 }}>{card.term}</h2>
+          {card.imageUrl && <img src={card.imageUrl} style={{ maxHeight: 100, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
+
+          {isMC && mcQ ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(mcQ.options ?? []).map((opt, i) => {
+                let bg = 'var(--bg-2)', border = 'var(--border)', color = 'var(--text-1)';
+                if (submitted) {
+                  if (opt === mcQ.correctAnswer) { bg = 'var(--green-bg)'; border = 'rgba(63,185,80,.4)'; color = 'var(--green)'; }
+                  else if (opt === selected && opt !== mcQ.correctAnswer) { bg = 'var(--red-bg)'; border = 'rgba(248,81,73,.4)'; color = 'var(--red)'; }
+                } else if (opt === selected) {
+                  bg = 'var(--blue-bg)'; border = 'var(--blue)'; color = 'var(--blue)';
+                }
+                return (
+                  <button key={i} onClick={() => { if (!submitted) setSelected(opt); }} disabled={submitted}
+                    style={{ padding: '13px 16px', background: bg, border: `1px solid ${border}`, borderRadius: 10, cursor: submitted ? 'default' : 'pointer', color, fontWeight: 500, textAlign: 'left', fontSize: 14, transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', border: `1px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0, color }}>
+                      {String.fromCharCode(65 + i)}
+                    </span>
+                    {opt}
+                  </button>
+                );
+              })}
             </div>
           ) : (
-            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>카드를 클릭해서 정의를 확인하세요</p>
+            <>
+              {card.hint && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>힌트: {card.hint}</p>}
+              <textarea className="input" rows={2} placeholder="정의를 입력하세요..." value={written}
+                onChange={e => setWritten(e.target.value)} disabled={submitted} autoFocus />
+            </>
           )}
-        </>
-      )}
+        </div>
 
-      {/* Written phase */}
-      {phase === 'written' && (
-        <>
-          <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>용어</p>
-            <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>{card.term}</h2>
-            {card.hint && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>힌트: {card.hint}</p>}
-            <textarea className="input" rows={2} placeholder="정의를 입력하세요..." value={input}
-              onChange={e => setInput(e.target.value)} disabled={submitted} autoFocus />
-            {submitted && (
-              <div className={`alert ${correct ? 'alert-success' : 'alert-error'}`} style={{ marginTop: 12 }}>
-                {correct ? <CheckCircle size={15} /> : <XCircle size={15} />}
-                <div>
-                  <div style={{ fontWeight: 700 }}>{correct ? '정답!' : '틀렸습니다.'}</div>
-                  {!correct && <div style={{ fontSize: 13 }}>정답: {card.definition}</div>}
-                </div>
-              </div>
-            )}
+        {submitted && (
+          <div className={`alert ${correct ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: 16 }}>
+            {correct ? <CheckCircle size={15} /> : <XCircle size={15} />}
+            <div>
+              <div style={{ fontWeight: 700 }}>{correct ? '정답!' : '틀렸습니다.'}</div>
+              {!correct && <div style={{ fontSize: 13 }}>정답: {isMC ? mcQ?.correctAnswer : card.definition}</div>}
+            </div>
           </div>
-          {!submitted
-            ? <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submitWritten} disabled={!input.trim()}>확인</button>
-            : <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={nextWritten}>{idx + 1 >= totalCards ? '결과 보기' : '다음'} →</button>
-          }
-        </>
-      )}
-    </div>
-  );
+        )}
+
+        {!submitted ? (
+          <button className="btn btn-primary btn-lg" style={{ width: '100%', background: 'linear-gradient(135deg, var(--purple), var(--blue))' }}
+            onClick={submitPractice} disabled={isMC ? !selected : !written.trim()}>확인</button>
+        ) : (
+          <button className="btn btn-primary btn-lg" style={{ width: '100%', background: 'linear-gradient(135deg, var(--purple), var(--blue))' }}
+            onClick={nextPractice}>{practiceIdx + 1 >= total ? '결과 보기' : '다음'} →</button>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
