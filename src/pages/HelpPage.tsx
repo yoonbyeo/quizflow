@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, HelpCircle, MessageSquare, ChevronDown, ChevronUp, BookOpen, Zap, PenLine, Brain, Shuffle, BarChart2 } from 'lucide-react';
+import { ChevronLeft, HelpCircle, MessageSquare, ChevronDown, ChevronUp, Zap, PenLine, Brain, Shuffle, BarChart2 } from 'lucide-react';
 
 interface FAQ {
   q: string;
@@ -18,11 +18,11 @@ const faqs: FAQ[] = [
   },
   {
     q: '학습 모드의 차이는 무엇인가요?',
-    a: `• 플래시카드: 카드를 넘기며 앞뒤를 확인하는 기본 학습 모드입니다.\n• 학습하기: AI가 틀린 카드를 반복 출제하는 적응형 학습 모드입니다.\n• 테스트: 객관식 또는 주관식 문제로 실력을 점검합니다.\n• 매칭: 용어와 정의를 짝 맞추는 게임입니다.\n• 쓰기: 정의를 보고 용어를 직접 입력하는 연습 모드입니다.`,
+    a: `• 플래시카드: 카드를 넘기며 앞뒤를 확인하는 기본 학습 모드입니다.\n• 학습하기: AI가 틀린 카드를 반복 출제하는 적응형 학습 모드입니다.\n• 테스트: 객관식 또는 주관식 문제로 실력을 점검합니다.\n• 매칭: 용어와 정의를 짝 맞추는 게임입니다.`,
   },
   {
     q: '진행 상황이 저장되나요?',
-    a: '플래시카드, 학습하기, 테스트 모드는 모두 학습 진행 상황이 자동 저장됩니다. 홈 화면의 "멈춘 지점에서 계속하기" 섹션에서 이어서 학습할 수 있습니다.',
+    a: '플래시카드, 학습하기 모드는 학습 진행 상황이 자동 저장됩니다. 홈 화면의 "멈춘 지점에서 계속하기" 섹션에서 이어서 학습할 수 있습니다.',
   },
   {
     q: '오답 노트는 어떻게 활용하나요?',
@@ -90,7 +90,6 @@ export default function HelpPage() {
     { icon: Brain, label: '학습하기', desc: '적응형 AI 학습 모드', color: 'var(--purple)' },
     { icon: PenLine, label: '테스트', desc: '객관식·주관식 실력 점검', color: 'var(--green)' },
     { icon: Shuffle, label: '매칭', desc: '짝 맞추기 게임', color: 'var(--yellow)' },
-    { icon: BookOpen, label: '쓰기', desc: '직접 입력 연습', color: '#f0883e' },
     { icon: BarChart2, label: '통계', desc: '학습 현황 한눈에 보기', color: 'var(--blue)' },
   ];
 

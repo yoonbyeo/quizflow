@@ -25,7 +25,7 @@ export function saveCompleted(setId: string, mode: string, done: boolean) {
 export function loadCompleted(setId: string, mode: string): boolean {
   try { return localStorage.getItem(`qf-completed-${mode}-${setId}`) === '1'; } catch { return false; }
 }
-export type LastMode = 'flashcard' | 'learn' | 'test' | 'match' | 'write';
+export type LastMode = 'flashcard' | 'learn' | 'test' | 'match';
 export function saveLastMode(setId: string, mode: LastMode) {
   try { localStorage.setItem(`qf-lastmode-${setId}`, mode); } catch {}
 }

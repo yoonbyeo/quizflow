@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Zap, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
+import { Zap, Shuffle, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import { cardsToCSV, downloadCSV } from '../utils/csv';
@@ -132,11 +132,6 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       label: '매칭', icon: Shuffle, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/match/${id}`,
       desc: '짝 맞추기 게임',
       info: '용어와 정의가 화면에 섞여 나옵니다.\n올바른 용어-정의 쌍을 클릭해서 연결하세요.\n모두 맞출수록 랭킹 시간이 기록됩니다.',
-    },
-    {
-      label: '쓰기', icon: BookText, color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: `/write/${id}`,
-      desc: '직접 입력 학습',
-      info: '정의를 보고 용어를 직접 타이핑합니다.\n정확히 입력하면 정답 처리되며, 틀리면 오답 노트에 기록됩니다.\n직접 쓰는 방식이라 장기 기억에 효과적입니다.',
     },
   ];
 

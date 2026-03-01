@@ -13,7 +13,6 @@ const MODE_META = {
   flashcard: { label: '플래시카드', color: 'var(--blue)', path: (id: string) => `/flashcard/${id}` },
   learn:     { label: '학습하기',   color: 'var(--purple)', path: (id: string) => `/learn/${id}` },
   match:     { label: '매칭',       color: 'var(--yellow)', path: (id: string) => `/match/${id}` },
-  write:     { label: '쓰기',       color: '#f0883e', path: (id: string) => `/write/${id}` },
 } as const;
 
 interface HomePageProps {

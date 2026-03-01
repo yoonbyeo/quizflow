@@ -45,7 +45,7 @@ export interface CardStat {
   difficulty: 'easy' | 'medium' | 'hard' | 'unrated';
 }
 
-export type StudyMode = 'flashcard' | 'match' | 'write' | 'learn';
+export type StudyMode = 'flashcard' | 'match' | 'learn';
 
 export interface TestQuestion {
   id: string;

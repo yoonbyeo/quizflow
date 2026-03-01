@@ -11,7 +11,6 @@ import EditSetPage from './pages/EditSetPage';
 import SetDetailPage from './pages/SetDetailPage';
 import FlashcardPage from './pages/FlashcardPage';
 import MatchPage from './pages/MatchPage';
-import WritePage from './pages/WritePage';
 import LearnPage from './pages/LearnPage';
 import StatsPage from './pages/StatsPage';
 import WrongNotePage from './pages/WrongNotePage';
@@ -64,7 +63,6 @@ function AppContent() {
                 <Route path="/set/:id" element={<SetDetailPage cardSets={cardSets} onResetStats={resetStats} />} />
                 <Route path="/flashcard/:id" element={<FlashcardPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
                 <Route path="/match/:id" element={<MatchPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
-                <Route path="/write/:id" element={<WritePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
                 <Route path="/stats" element={<StatsPage cardSets={cardSets} userId={user?.id} />} />
                 <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />

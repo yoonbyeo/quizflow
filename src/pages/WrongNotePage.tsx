@@ -450,7 +450,7 @@ export default function WrongNotePage({ cardSets, onUpdateStat }: WrongNotePageP
           <AlertCircle size={20} color="var(--red)" />
           <h1 style={{ fontSize: 22, fontWeight: 800 }}>오답 노트</h1>
           <InfoTooltip
-            text={'학습하기·테스트·쓰기 모드에서 한 번이라도 틀린 카드가 자동으로 기록됩니다.\n\n• 오답 횟수순 또는 오답률순으로 정렬할 수 있습니다.\n• 3회 이상 틀린 카드는 "집중 필요" 카드로 표시됩니다.\n• 필터 후 학습/테스트 버튼으로 오답 카드만 집중 학습할 수 있습니다.'}
+            text={'학습하기·테스트 모드에서 한 번이라도 틀린 카드가 자동으로 기록됩니다.\n\n• 오답 횟수순 또는 오답률순으로 정렬할 수 있습니다.\n• 3회 이상 틀린 카드는 "집중 필요" 카드로 표시됩니다.\n• 필터 후 학습/테스트 버튼으로 오답 카드만 집중 학습할 수 있습니다.'}
             position="right" width={270} />
         </div>
         <p style={{ fontSize: 14, color: 'var(--text-2)' }}>자주 틀리는 카드를 모아 집중 학습하세요</p>
