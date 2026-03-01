@@ -127,45 +127,52 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
 
   // resume=1 이면 설정 화면 건너뛰고 바로 시작
   useEffect(() => {
-    if (resume && set && set.cards.length > 0) {
-      const cfg = (id ? loadLearnConfig(id) : null) ??
-        { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
-      setConfig(cfg);
-      // startLearn 로직 인라인으로 실행
-      const priority = (c: CardStat | undefined) => {
-        if (!c || c.difficulty === 'unrated') return 0;
-        if (c.difficulty === 'hard') return 1;
-        if (c.difficulty === 'medium') return 2;
-        return 3;
-      };
-      const cards = shuffleArray([...set.cards]).sort((a, b) =>
-        priority(set.studyStats?.cardStats?.[a.id] as CardStat | undefined) -
-        priority(set.studyStats?.cardStats?.[b.id] as CardStat | undefined)
-      );
-      setSortedCards(cards);
-      setFlashResults([]); setFlashScore(0); setPracticeScore(0);
-      setFlipped(false); setFlashIdx(0); setSubmitted(false);
-      setSelected(null); setWritten(''); setMasteredSet(new Set());
-      if (cfg.includeFlashcard) {
-        setScreen('flash');
-      } else {
-        const items = cards.map((card: CardSet['cards'][0], i: number) => {
-          const canMC = cfg.includeMultipleChoice && set.cards.length >= 4;
-          const canW = cfg.includeWritten;
-          let type: 'mc' | 'written' = 'written';
-          if (canMC && canW) type = i % 2 === 0 ? 'mc' : 'written';
-          else if (canMC) type = 'mc';
-          setPracticeItems(items);
-          setPracticeQueue(items.map((_: any, i: number) => i));
-          setQueuePos(0);
-          setScreen('practice');
-          return { card, type, mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null };
-        });
-        setPracticeItems(items);
-        setPracticeQueue(items.map((_: any, i: number) => i));
-        setQueuePos(0);
-        setScreen('practice');
-      }
+    if (!resume || !set || set.cards.length === 0) return;
+
+    const cfg: LearnConfig = (id ? loadLearnConfig(id) : null) ??
+      { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
+    setConfig(cfg);
+
+    const priority = (c: CardStat | undefined) => {
+      if (!c || c.difficulty === 'unrated') return 0;
+      if (c.difficulty === 'hard') return 1;
+      if (c.difficulty === 'medium') return 2;
+      return 3;
+    };
+    const cards = shuffleArray([...set.cards]).sort((a, b) =>
+      priority(set.studyStats?.cardStats?.[a.id] as CardStat | undefined) -
+      priority(set.studyStats?.cardStats?.[b.id] as CardStat | undefined)
+    );
+    setSortedCards(cards);
+    setFlashResults([]);
+    setFlashScore(0);
+    setPracticeScore(0);
+    setFlipped(false);
+    setFlashIdx(0);
+    setSubmitted(false);
+    setSelected(null);
+    setWritten('');
+    setMasteredSet(new Set());
+
+    if (cfg.includeFlashcard) {
+      setScreen('flash');
+    } else {
+      const canMC = cfg.includeMultipleChoice && set.cards.length >= 4;
+      const canW = cfg.includeWritten;
+      const items: PracticeItem[] = cards.map((card, i) => {
+        let type: 'mc' | 'written' = 'written';
+        if (canMC && canW) type = i % 2 === 0 ? 'mc' : 'written';
+        else if (canMC) type = 'mc';
+        return {
+          card,
+          type,
+          mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null,
+        };
+      });
+      setPracticeItems(items);
+      setPracticeQueue(items.map((_, i) => i));
+      setQueuePos(0);
+      setScreen('practice');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
