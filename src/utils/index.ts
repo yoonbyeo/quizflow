@@ -19,9 +19,7 @@ export function formatDate(timestamp: number): string {
   if (diff < day) return `${Math.floor(diff / hour)}시간 전`;
   if (diff < week) return `${Math.floor(diff / day)}일 전`;
 
-  return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' }).format(
-    new Date(timestamp)
-  );
+  return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' }).format(new Date(timestamp));
 }
 
 export function shuffleArray<T>(array: T[]): T[] {
@@ -39,14 +37,11 @@ export function generateMultipleChoiceQuestion(
   questionType: 'term' | 'definition' = 'definition'
 ): TestQuestion {
   const isDefinition = questionType === 'definition';
-  const question = isDefinition ? `"${card.term}"의 정의는?` : `다음 정의에 해당하는 용어는?\n"${card.definition}"`;
+  const question = isDefinition ? `"${card.term}"의 뜻은?` : `다음 뜻에 해당하는 단어는?\n"${card.definition}"`;
   const correctAnswer = isDefinition ? card.definition : card.term;
-
   const wrongCards = shuffleArray(allCards.filter((c) => c.id !== card.id)).slice(0, 3);
   const wrongAnswers = wrongCards.map((c) => (isDefinition ? c.definition : c.term));
-
   const options = shuffleArray([correctAnswer, ...wrongAnswers]);
-
   return {
     id: Math.random().toString(36).slice(2),
     type: 'multiple-choice',
@@ -60,10 +55,9 @@ export function generateMultipleChoiceQuestion(
 export function generateWrittenQuestion(card: Card, questionType: 'term' | 'definition' = 'definition'): TestQuestion {
   const isDefinition = questionType === 'definition';
   const question = isDefinition
-    ? `"${card.term}"의 정의를 입력하세요`
-    : `다음 정의에 해당하는 용어를 입력하세요:\n"${card.definition}"`;
+    ? `"${card.term}"의 뜻을 입력하세요`
+    : `다음 뜻에 해당하는 단어를 입력하세요:\n"${card.definition}"`;
   const correctAnswer = isDefinition ? card.definition : card.term;
-
   return {
     id: Math.random().toString(36).slice(2),
     type: 'written',
@@ -77,8 +71,4 @@ export function checkWrittenAnswer(userAnswer: string, correctAnswer: string): b
   const normalize = (str: string) =>
     str.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.,!?;:'"()]/g, '');
   return normalize(userAnswer) === normalize(correctAnswer);
-}
-
-export function generateId(): string {
-  return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
 }

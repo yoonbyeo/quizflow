@@ -1,242 +1,183 @@
-import { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
-  Search, Plus, BookOpen, Trash2, Copy, Edit3, ChevronRight,
-  Layers, Clock, TrendingUp, Zap
+  BookOpen, Clock, TrendingUp, ChevronRight, Zap, Plus, ArrowRight
 } from 'lucide-react';
-import { useStore } from '../store/useStore';
 import { cn, formatDate } from '../utils';
-import Button from '../components/ui/Button';
-import Modal from '../components/ui/Modal';
-import type { SortOrder } from '../types';
+import type { CardSet, CardStat } from '../types';
 
-export default function HomePage() {
+interface HomePageProps {
+  cardSets: CardSet[];
+  loading: boolean;
+}
+
+export default function HomePage({ cardSets, loading }: HomePageProps) {
   const navigate = useNavigate();
-  const { cardSets, deleteCardSet, duplicateCardSet } = useStore();
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<SortOrder>('updated');
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    let sets = [...cardSets];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      sets = sets.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          s.description?.toLowerCase().includes(q) ||
-          s.category?.toLowerCase().includes(q)
-      );
-    }
-    switch (sortBy) {
-      case 'updated': sets.sort((a, b) => b.updatedAt - a.updatedAt); break;
-      case 'created': sets.sort((a, b) => b.createdAt - a.createdAt); break;
-      case 'alphabetical': sets.sort((a, b) => a.title.localeCompare(b.title)); break;
-      case 'size': sets.sort((a, b) => b.cards.length - a.cards.length); break;
-    }
-    return sets;
-  }, [cardSets, search, sortBy]);
+  const recentSets = [...cardSets]
+    .filter((s) => s.studyStats.lastStudied)
+    .sort((a, b) => (b.studyStats.lastStudied ?? 0) - (a.studyStats.lastStudied ?? 0))
+    .slice(0, 3);
 
-  const totalCards = cardSets.reduce((sum, s) => sum + s.cards.length, 0);
-  const recentlyStudied = cardSets.filter((s) => s.studyStats.lastStudied).length;
+  const recentlyCreated = [...cardSets]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 6);
 
-  const handleDelete = (id: string) => {
-    deleteCardSet(id);
-    setDeleteConfirm(null);
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400 text-sm">불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (cardSets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center mb-6 shadow-2xl shadow-blue-500/30">
+          <Zap className="w-10 h-10 text-white" fill="currentColor" />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-100 mb-3">QuizFlow에 오신 것을 환영합니다</h1>
+        <p className="text-slate-400 mb-8 max-w-md">
+          플래시카드 세트를 만들고 다양한 학습 모드로 효과적으로 공부하세요
+        </p>
+        <button
+          onClick={() => navigate('/create')}
+          className="flex items-center gap-2 px-6 py-3 gradient-primary rounded-xl text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] transition-all"
+        >
+          <Plus className="w-5 h-5" />
+          첫 번째 세트 만들기
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen pt-20 pb-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Hero */}
-        {cardSets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center mb-6 shadow-2xl shadow-blue-500/30">
-              <Zap className="w-10 h-10 text-white" fill="currentColor" />
-            </div>
-            <h1 className="text-4xl font-bold text-slate-100 mb-3">QuizFlow에 오신 것을 환영합니다</h1>
-            <p className="text-lg text-slate-400 mb-8 max-w-md">
-              플래시카드 세트를 만들고 다양한 테스트 모드로 효과적으로 학습하세요
-            </p>
-            <Button size="lg" onClick={() => navigate('/create')}>
-              <Plus className="w-5 h-5" />
-              첫 번째 세트 만들기
-            </Button>
+    <div className="max-w-5xl mx-auto space-y-8">
+      {/* Recent study */}
+      {recentSets.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-100">멈춘 지점에서 계속하기</h2>
           </div>
-        ) : (
-          <>
-            {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
-              {[
-                { label: '총 세트', value: cardSets.length, icon: Layers, color: 'text-blue-400' },
-                { label: '총 카드', value: totalCards, icon: BookOpen, color: 'text-violet-400' },
-                { label: '학습한 세트', value: recentlyStudied, icon: TrendingUp, color: 'text-emerald-400' },
-              ].map(({ label, value, icon: Icon, color }) => (
-                <div key={label} className="glass rounded-2xl p-5 card-glow">
-                  <div className={cn('flex items-center gap-2 mb-2', color)}>
-                    <Icon className="w-4 h-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
-                  </div>
-                  <div className="text-3xl font-bold text-slate-100">{value}</div>
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentSets.map((set) => (
+              <RecentSetCard key={set.id} set={set} onClick={() => navigate(`/set/${set.id}`)} />
+            ))}
+          </div>
+        </section>
+      )}
 
-            {/* Search & Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="세트 검색..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 glass rounded-xl text-sm text-slate-200 placeholder:text-slate-500 border-transparent focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
-              </div>
-              <div className="flex gap-2">
-                {(['updated', 'created', 'alphabetical', 'size'] as SortOrder[]).map((order) => {
-                  const labels = { updated: '최근 수정', created: '최근 생성', alphabetical: '가나다순', size: '카드 수' };
-                  return (
-                    <button
-                      key={order}
-                      onClick={() => setSortBy(order)}
-                      className={cn(
-                        'px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap',
-                        sortBy === order
-                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                          : 'glass text-slate-400 hover:text-slate-200'
-                      )}
-                    >
-                      {labels[order]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+      {/* All sets */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-100">
+            {recentSets.length > 0 ? '새로운 콘텐츠' : '내 세트'}
+          </h2>
+          <Link to="/library" className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+            전체 보기 <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {recentlyCreated.map((set) => (
+            <SetCard key={set.id} set={set} onClick={() => navigate(`/set/${set.id}`)} />
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
 
-            {/* Card Sets Grid */}
-            {filtered.length === 0 ? (
-              <div className="text-center py-16 text-slate-500">
-                <Search className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                <p>검색 결과가 없습니다</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map((set) => {
-                  const accuracy = (() => {
-                    const stats = Object.values(set.studyStats.cardStats);
-                    if (stats.length === 0) return null;
-                    const total = stats.reduce((s, c) => s + c.correct + c.incorrect, 0);
-                    const correct = stats.reduce((s, c) => s + c.correct, 0);
-                    return total === 0 ? null : Math.round((correct / total) * 100);
-                  })();
+function RecentSetCard({ set, onClick }: { set: CardSet; onClick: () => void }) {
+  const stats = Object.values(set.studyStats.cardStats) as CardStat[];
+  const total = stats.reduce((s, c) => s + c.correct + c.incorrect, 0);
+  const correct = stats.reduce((s, c) => s + c.correct, 0);
+  const accuracy = total === 0 ? 0 : Math.round((correct / total) * 100);
 
-                  return (
-                    <div
-                      key={set.id}
-                      className="glass rounded-2xl p-5 card-glow card-glow-hover transition-all group cursor-pointer"
-                      onClick={() => navigate(`/set/${set.id}`)}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          {set.category && (
-                            <span className="inline-block px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 text-xs font-medium mb-2">
-                              {set.category}
-                            </span>
-                          )}
-                          <h3 className="text-base font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
-                            {set.title}
-                          </h3>
-                          {set.description && (
-                            <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">{set.description}</p>
-                          )}
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400 transition-colors ml-3 flex-shrink-0 mt-0.5" />
-                      </div>
-
-                      <div className="flex items-center gap-3 text-xs text-slate-500 mb-4">
-                        <span className="flex items-center gap-1">
-                          <BookOpen className="w-3 h-3" />
-                          {set.cards.length}개 카드
-                        </span>
-                        {set.studyStats.lastStudied && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatDate(set.studyStats.lastStudied)}
-                          </span>
-                        )}
-                        {accuracy !== null && (
-                          <span className={cn(
-                            'flex items-center gap-1 ml-auto font-medium',
-                            accuracy >= 80 ? 'text-emerald-400' :
-                            accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'
-                          )}>
-                            <TrendingUp className="w-3 h-3" />
-                            {accuracy}%
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Progress bar */}
-                      {set.cards.length > 0 && accuracy !== null && (
-                        <div className="progress-bar mb-4">
-                          <div className="progress-fill" style={{ width: `${accuracy}%` }} />
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 pt-3 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
-                        <Link
-                          to={`/set/${set.id}`}
-                          className="flex-1 text-center py-2 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-medium hover:bg-blue-500/25 transition-colors"
-                        >
-                          학습하기
-                        </Link>
-                        <button
-                          onClick={() => navigate(`/edit/${set.id}`)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors"
-                          title="편집"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => duplicateCardSet(set.id)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors"
-                          title="복제"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(set.id)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="삭제"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+  return (
+    <div
+      onClick={onClick}
+      className="glass rounded-2xl p-5 card-glow card-glow-hover transition-all cursor-pointer group relative overflow-hidden"
+    >
+      <div className="absolute inset-0 gradient-primary opacity-5 group-hover:opacity-10 transition-opacity" />
+      <div className="relative">
+        {set.category && (
+          <span className="inline-block px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 text-xs font-medium mb-2">
+            {set.category}
+          </span>
         )}
+        <h3 className="text-base font-semibold text-slate-100 mb-1 group-hover:text-blue-400 transition-colors line-clamp-2">
+          {set.title}
+        </h3>
+        <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+          <span className="flex items-center gap-1">
+            <BookOpen className="w-3 h-3" />
+            {set.cards.length}개 카드
+          </span>
+          {set.studyStats.lastStudied && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDate(set.studyStats.lastStudied)}
+            </span>
+          )}
+        </div>
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-slate-500">{accuracy}% 완료</span>
+          </div>
+          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 transition-all" style={{ width: `${accuracy}%` }} />
+          </div>
+        </div>
+        <button className="w-full py-2 rounded-xl bg-blue-500/20 text-blue-400 text-sm font-semibold hover:bg-blue-500/30 transition-colors">
+          계속하기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SetCard({ set, onClick }: { set: CardSet; onClick: () => void }) {
+  const stats = Object.values(set.studyStats.cardStats) as CardStat[];
+  const total = stats.reduce((s, c) => s + c.correct + c.incorrect, 0);
+  const correct = stats.reduce((s, c) => s + c.correct, 0);
+  const accuracy = total === 0 ? null : Math.round((correct / total) * 100);
+
+  return (
+    <div
+      onClick={onClick}
+      className="glass rounded-2xl p-5 card-glow card-glow-hover transition-all cursor-pointer group"
+    >
+      <div className="mb-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center mb-3">
+          <BookOpen className="w-5 h-5 text-blue-400" />
+        </div>
+        {set.category && (
+          <span className="inline-block px-2 py-0.5 rounded-md bg-slate-700 text-slate-400 text-xs font-medium mb-2">
+            {set.category}
+          </span>
+        )}
+        <h3 className="text-sm font-semibold text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-2 mb-1">
+          {set.title}
+        </h3>
+        <p className="text-xs text-slate-500">{set.cards.length}개 카드</p>
       </div>
 
-      <Modal
-        open={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="세트 삭제"
-        size="sm"
-      >
-        <p className="text-slate-300 mb-6">
-          이 세트를 삭제하면 모든 카드와 학습 기록이 사라집니다. 계속하시겠습니까?
-        </p>
-        <div className="flex gap-3 justify-end">
-          <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>취소</Button>
-          <Button variant="danger" onClick={() => handleDelete(deleteConfirm!)}>삭제</Button>
-        </div>
-      </Modal>
+      <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
+        <span className="text-xs text-slate-500">{formatDate(set.updatedAt)}</span>
+        {accuracy !== null && (
+          <span className={cn(
+            'flex items-center gap-1 text-xs font-medium',
+            accuracy >= 80 ? 'text-emerald-400' : accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'
+          )}>
+            <TrendingUp className="w-3 h-3" />
+            {accuracy}%
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400 transition-colors" />
+      </div>
     </div>
   );
 }

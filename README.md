@@ -1,50 +1,73 @@
-# QuizFlow ⚡
+# React + TypeScript + Vite
 
-스마트한 플래시카드 학습 앱 — Cloudflare Pages 배포용
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## 기능
+Currently, two official plugins are available:
 
-- **플래시카드** — 카드 뒤집기, 알아요/모르겠어요 평가, 셔플
-- **테스트** — 객관식 + 주관식, 문제 수/방향 설정 가능
-- **매칭 게임** — 용어-정의 짝 맞추기 (타이머 포함)
-- **쓰기 연습** — 직접 입력 학습
-- **학습 통계** — 정확도, 난이도 분포, 최근 학습 현황
-- **로컬 스토리지** — 데이터 자동 저장 (서버 불필요)
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## 로컬 실행
+## React Compiler
 
-```bash
-npm install
-npm run dev
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## Cloudflare Pages 배포
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-### 방법 1: Git 연동 (권장)
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-1. GitHub에 레포 push
-2. [Cloudflare Dashboard](https://dash.cloudflare.com) → Pages → Create a project
-3. GitHub 레포 연결
-4. 빌드 설정:
-   - **Framework preset**: Vite
-   - **Build command**: `npm run build`
-   - **Build output directory**: `dist`
-5. Deploy!
-
-### 방법 2: CLI 직접 배포
-
-```bash
-npm install -g wrangler
-npm run build
-wrangler pages deploy dist --project-name quizflow
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-## 기술 스택
-
-- React 19 + TypeScript
-- Vite 7
-- Tailwind CSS v4
-- Zustand (상태 관리)
-- React Router v7
-- Lucide React (아이콘)
-- Framer Motion (애니메이션)
