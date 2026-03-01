@@ -187,10 +187,16 @@ export function useCardSets(userId: string | undefined) {
 
   const uploadCardImage = useCallback(async (file: File): Promise<string | null> => {
     if (!userId) return null;
-    const ext = file.name.split('.').pop();
+    const ext = file.name.split('.').pop() ?? 'jpg';
     const path = `${userId}/${generateId()}.${ext}`;
-    const { error } = await supabase.storage.from('card-images').upload(path, file);
-    if (error) return null;
+    const { error } = await supabase.storage.from('card-images').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (error) {
+      console.error('[uploadCardImage] error:', error);
+      return null;
+    }
     const { data } = supabase.storage.from('card-images').getPublicUrl(path);
     return data.publicUrl;
   }, [userId]);

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder } from 'lucide-react';
+import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle } from 'lucide-react';
 import { signOut } from '../../hooks/useAuth';
 import type { User } from '@supabase/supabase-js';
 import type { CardSet, Folder as FolderType } from '../../types';
@@ -19,10 +19,17 @@ export default function Sidebar({ user, cardSets, folders, mobileOpen, onMobileC
   const handleSignOut = async () => { await signOut(); navigate('/login'); };
   const isActive = (to: string) => to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
 
+  // 전체 오답 카드 수 계산
+  const wrongCardCount = cardSets.reduce((total, set) => {
+    const stats = set.studyStats?.cardStats ?? {};
+    return total + set.cards.filter(c => (stats[c.id]?.incorrect ?? 0) > 0).length;
+  }, 0);
+
   const nav = [
     { to: '/', label: '홈', icon: Home },
     { to: '/library', label: '라이브러리', icon: Library },
     { to: '/folders', label: '폴더', icon: Folder },
+    { to: '/wrong-note', label: '오답 노트', icon: AlertCircle, badge: wrongCardCount > 0 ? wrongCardCount : null },
     { to: '/stats', label: '통계', icon: BarChart2 },
   ];
 
@@ -34,9 +41,10 @@ export default function Sidebar({ user, cardSets, folders, mobileOpen, onMobileC
       </Link>
 
       <nav style={{ flex: 1, paddingTop: 8, overflow: 'hidden auto' }}>
-        {nav.map(({ to, label, icon: Icon }) => (
+        {nav.map(({ to, label, icon: Icon, badge }: any) => (
           <Link key={to} to={to} onClick={onMobileClose} className={`nav-item ${isActive(to) ? 'active' : ''}`}>
             <Icon size={16} /> {label}
+            {badge ? <span className="badge badge-red" style={{ marginLeft: 'auto', fontSize: 10, padding: '1px 6px' }}>{badge}</span> : null}
           </Link>
         ))}
 
