@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, BookOpen, TrendingUp, Target, Clock, Zap } from 'lucide-react';
-import { cn, formatDate } from '../utils';
+import { BarChart2, TrendingUp, BookOpen, Zap, Target } from 'lucide-react';
 import type { CardSet, CardStat } from '../types';
 
 interface StatsPageProps {
@@ -10,163 +9,114 @@ interface StatsPageProps {
 export default function StatsPage({ cardSets }: StatsPageProps) {
   const navigate = useNavigate();
 
-  const totalCards = cardSets.reduce((s, set) => s + set.cards.length, 0);
-  const totalSessions = cardSets.reduce((s, set) => s + set.studyStats.totalStudySessions, 0);
+  const allStats = cardSets.flatMap(s => Object.values(s.studyStats?.cardStats ?? {}) as CardStat[]);
+  const totalCards = cardSets.reduce((acc, s) => acc + s.cards.length, 0);
+  const studied = allStats.length;
+  const mastered = allStats.filter(c => c.difficulty === 'easy').length;
+  const learning = allStats.filter(c => c.difficulty === 'medium').length;
+  const struggling = allStats.filter(c => c.difficulty === 'hard').length;
+  const totalCorrect = allStats.reduce((acc, c) => acc + (c.correct ?? 0), 0);
+  const totalIncorrect = allStats.reduce((acc, c) => acc + (c.incorrect ?? 0), 0);
+  const totalAttempts = totalCorrect + totalIncorrect;
+  const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
 
-  const allCardStats = cardSets.flatMap((set) =>
-    (Object.values(set.studyStats.cardStats) as CardStat[]).map((stat) => ({ ...stat, setId: set.id }))
-  );
-
-  const totalAttempts = allCardStats.reduce((s: number, c) => s + c.correct + c.incorrect, 0);
-  const totalCorrect = allCardStats.reduce((s: number, c) => s + c.correct, 0);
-  const overallAccuracy = totalAttempts === 0 ? null : Math.round((totalCorrect / totalAttempts) * 100);
-
-  const studiedSets = cardSets.filter((s) => s.studyStats.lastStudied)
-    .sort((a, b) => (b.studyStats.lastStudied ?? 0) - (a.studyStats.lastStudied ?? 0));
-
-  const setAccuracies = cardSets.map((set) => {
-    const stats = Object.values(set.studyStats.cardStats);
-    const total = stats.reduce((s, c) => s + c.correct + c.incorrect, 0);
-    const correct = stats.reduce((s, c) => s + c.correct, 0);
-    return { set, accuracy: total === 0 ? null : Math.round((correct / total) * 100), total };
-  }).filter((s) => s.accuracy !== null).sort((a, b) => b.accuracy! - a.accuracy!);
-
-  const difficultyDist = {
-    easy: allCardStats.filter((c) => c.difficulty === 'easy').length,
-    medium: allCardStats.filter((c) => c.difficulty === 'medium').length,
-    hard: allCardStats.filter((c) => c.difficulty === 'hard').length,
-    unrated: allCardStats.filter((c) => c.difficulty === 'unrated').length,
-  };
+  const setStats = cardSets.map(s => {
+    const stats = Object.values(s.studyStats?.cardStats ?? {}) as CardStat[];
+    const total = s.cards.length;
+    const m = stats.filter(c => c.difficulty === 'easy').length;
+    const pct = total > 0 ? Math.round((m / total) * 100) : 0;
+    return { ...s, pct, masteredCount: m, total };
+  }).sort((a, b) => b.pct - a.pct);
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-100 mb-1">학습 통계</h1>
-        <p className="text-slate-400">전체 학습 현황을 한눈에 확인하세요</p>
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <BarChart2 size={22} color="var(--blue)" /> 학습 통계
+        </h1>
+        <p style={{ fontSize: 14, color: 'var(--text-2)' }}>전체 학습 현황을 확인하세요</p>
       </div>
 
-      {totalAttempts === 0 ? (
-        <div className="text-center py-24 glass rounded-2xl card-glow">
-          <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-blue-500/30">
-            <Zap className="w-10 h-10 text-white" fill="currentColor" />
+      {/* Overview */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 28 }}>
+        {[
+          { label: '총 세트', value: cardSets.length, icon: BookOpen, color: 'var(--blue)' },
+          { label: '총 카드', value: totalCards, icon: Zap, color: 'var(--purple)' },
+          { label: '학습한 카드', value: studied, icon: TrendingUp, color: 'var(--yellow)' },
+          { label: '정확도', value: `${accuracy}%`, icon: Target, color: 'var(--green)' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="stat-card">
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <Icon size={18} color={color} />
+            </div>
+            <div className="stat-value" style={{ color, fontSize: 24 }}>{value}</div>
+            <div className="stat-label">{label}</div>
           </div>
-          <h2 className="text-2xl font-bold text-slate-200 mb-3">아직 학습 기록이 없어요</h2>
-          <p className="text-slate-400 mb-6">세트를 만들고 학습을 시작하면 통계가 나타납니다</p>
-          <button onClick={() => navigate('/')}
-            className="px-6 py-3 gradient-primary rounded-xl text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all">
-            시작하기
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        ))}
+      </div>
+
+      {/* Mastery breakdown */}
+      {studied > 0 && (
+        <div className="card" style={{ padding: 24, marginBottom: 24 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>숙달도 분포</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: '전체 세트', value: cardSets.length, icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-              { label: '전체 카드', value: totalCards, icon: Target, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-              { label: '총 학습', value: totalSessions, icon: BarChart2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-              {
-                label: '전체 정확도',
-                value: overallAccuracy !== null ? `${overallAccuracy}%` : '-',
-                icon: TrendingUp,
-                color: overallAccuracy !== null && overallAccuracy >= 80 ? 'text-emerald-400' : overallAccuracy !== null && overallAccuracy >= 60 ? 'text-yellow-400' : 'text-red-400',
-                bg: 'bg-slate-800/60'
-              },
-            ].map(({ label, value, icon: Icon, color, bg }) => (
-              <div key={label} className="glass rounded-2xl p-5 card-glow">
-                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center mb-3', bg)}>
-                  <Icon className={cn('w-5 h-5', color)} />
-                </div>
-                <div className={cn('text-3xl font-bold mb-1', color)}>{value}</div>
-                <div className="text-xs text-slate-500">{label}</div>
+              { label: '숙달', value: mastered, color: 'var(--green)', bg: 'var(--green-bg)' },
+              { label: '학습 중', value: learning, color: 'var(--yellow)', bg: 'var(--yellow-bg)' },
+              { label: '어려움', value: struggling, color: 'var(--red)', bg: 'var(--red-bg)' },
+            ].map(({ label, value, color, bg }) => (
+              <div key={label} style={{ textAlign: 'center', padding: 16, background: bg, borderRadius: 10 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color }}>{value}</div>
+                <div style={{ fontSize: 12, color }}>{label}</div>
               </div>
             ))}
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div className="glass rounded-2xl p-6 card-glow">
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-5">난이도 분포</h3>
-              <div className="space-y-4">
-                {[
-                  { label: '쉬움', count: difficultyDist.easy, color: 'bg-emerald-500', textColor: 'text-emerald-400' },
-                  { label: '보통', count: difficultyDist.medium, color: 'bg-yellow-500', textColor: 'text-yellow-400' },
-                  { label: '어려움', count: difficultyDist.hard, color: 'bg-red-500', textColor: 'text-red-400' },
-                  { label: '미평가', count: difficultyDist.unrated, color: 'bg-slate-500', textColor: 'text-slate-400' },
-                ].map(({ label, count, color, textColor }) => {
-                  const pct = allCardStats.length > 0 ? (count / allCardStats.length) * 100 : 0;
-                  return (
-                    <div key={label}>
-                      <div className="flex justify-between mb-1.5">
-                        <span className={cn('text-sm font-medium', textColor)}>{label}</span>
-                        <span className="text-sm text-slate-400">{count}개 ({Math.round(pct)}%)</span>
-                      </div>
-                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <div>
+            <div style={{ display: 'flex', gap: 3, height: 10, borderRadius: 99, overflow: 'hidden', background: 'var(--bg-3)' }}>
+              {mastered > 0 && <div style={{ flex: mastered, background: 'var(--green)', transition: 'flex .4s' }} />}
+              {learning > 0 && <div style={{ flex: learning, background: 'var(--yellow)', transition: 'flex .4s' }} />}
+              {struggling > 0 && <div style={{ flex: struggling, background: 'var(--red)', transition: 'flex .4s' }} />}
             </div>
-
-            <div className="glass rounded-2xl p-6 card-glow">
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-5">세트별 정확도</h3>
-              {setAccuracies.length === 0 ? (
-                <p className="text-slate-500 text-sm">데이터 없음</p>
-              ) : (
-                <div className="space-y-3">
-                  {setAccuracies.slice(0, 5).map(({ set, accuracy }) => (
-                    <button key={set.id} onClick={() => navigate(`/set/${set.id}`)} className="w-full text-left group">
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm text-slate-300 group-hover:text-blue-400 transition-colors truncate mr-3">{set.title}</span>
-                        <span className={cn('text-sm font-bold flex-shrink-0', accuracy! >= 80 ? 'text-emerald-400' : accuracy! >= 60 ? 'text-yellow-400' : 'text-red-400')}>
-                          {accuracy}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div className={cn('h-full rounded-full', accuracy! >= 80 ? 'bg-emerald-500' : accuracy! >= 60 ? 'bg-yellow-500' : 'bg-red-500')}
-                          style={{ width: `${accuracy}%` }} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+              <span>총 {studied}개 학습됨</span>
+              <span>{totalAttempts}번 시도 · {totalCorrect}번 정답</span>
             </div>
           </div>
+        </div>
+      )}
 
-          {studiedSets.length > 0 && (
-            <div className="glass rounded-2xl p-6 card-glow">
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-5">최근 학습</h3>
-              <div className="space-y-2">
-                {studiedSets.slice(0, 5).map((set) => {
-                  const stats = Object.values(set.studyStats.cardStats) as CardStat[];
-                  const total = stats.reduce((s: number, c) => s + c.correct + c.incorrect, 0);
-                  const correct = stats.reduce((s: number, c) => s + c.correct, 0);
-                  const acc = total === 0 ? null : Math.round((correct / total) * 100);
-                  return (
-                    <button key={set.id} onClick={() => navigate(`/set/${set.id}`)}
-                      className="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-white/[0.04] transition-colors group">
-                      <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center flex-shrink-0 opacity-80 group-hover:opacity-100">
-                        <BookOpen className="w-5 h-5 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-200 group-hover:text-blue-400 transition-colors truncate">{set.title}</p>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Clock className="w-3 h-3" /> {formatDate(set.studyStats.lastStudied!)}
-                        </p>
-                      </div>
-                      {acc !== null && (
-                        <span className={cn('text-sm font-bold', acc >= 80 ? 'text-emerald-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400')}>
-                          {acc}%
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+      {/* Per-set stats */}
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>세트별 숙달도</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {setStats.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-2)', fontSize: 14 }}>
+            아직 학습 기록이 없습니다. 학습을 시작해보세요!
+          </div>
+        ) : (
+          setStats.map(s => (
+            <div
+              key={s.id}
+              className="card card-hover"
+              style={{ padding: '16px 20px', cursor: 'pointer' }}
+              onClick={() => navigate(`/set/${s.id}`)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{s.title}</div>
+                  {s.category && <span className="badge badge-blue" style={{ marginTop: 4, display: 'inline-block' }}>{s.category}</span>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: s.pct >= 70 ? 'var(--green)' : s.pct >= 40 ? 'var(--yellow)' : 'var(--text-2)' }}>{s.pct}%</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.masteredCount}/{s.total}</div>
+                </div>
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${s.pct}%` }} />
               </div>
             </div>
-          )}
-        </>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }

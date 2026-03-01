@@ -1,17 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Save, GripVertical } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Modal from '../components/ui/Modal';
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Trash2, ChevronLeft, Save } from 'lucide-react';
 import type { CardSet } from '../types';
-
-interface CardInput {
-  id: string;
-  term: string;
-  definition: string;
-  hint: string;
-  isNew?: boolean;
-}
 
 interface EditSetPageProps {
   cardSets: CardSet[];
@@ -22,146 +12,121 @@ interface EditSetPageProps {
   onSaveCards: (setId: string, cards: { id?: string; term: string; definition: string; hint?: string; isNew?: boolean }[]) => Promise<void>;
 }
 
+interface DraftCard {
+  id?: string;
+  term: string;
+  definition: string;
+  hint: string;
+  isNew?: boolean;
+}
+
 export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: EditSetPageProps) {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
+  const set = cardSets.find(s => s.id === id);
 
-  const set = cardSets.find((s) => s.id === id);
-
-  const [title, setTitle] = useState(set?.title || '');
-  const [description, setDescription] = useState(set?.description || '');
-  const [category, setCategory] = useState(set?.category || '');
-  const [cards, setCards] = useState<CardInput[]>(() =>
-    set?.cards.map((c: { id: string; term: string; definition: string; hint?: string }) => ({ id: c.id, term: c.term, definition: c.definition, hint: c.hint || '' })) || []
+  const [title, setTitle] = useState(set?.title ?? '');
+  const [description, setDescription] = useState(set?.description ?? '');
+  const [category, setCategory] = useState(set?.category ?? '');
+  const [cards, setCards] = useState<DraftCard[]>(
+    set?.cards.map(c => ({ id: c.id, term: c.term, definition: c.definition, hint: c.hint ?? '' })) ?? []
   );
-  const [deleteCardConfirm, setDeleteCardConfirm] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!set) navigate('/');
-  }, [set, navigate]);
+  if (!set) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <p style={{ color: 'var(--text-2)', marginBottom: 16 }}>세트를 찾을 수 없습니다.</p>
+        <button className="btn btn-secondary btn-md" onClick={() => navigate(-1)}>돌아가기</button>
+      </div>
+    );
+  }
 
-  const addRow = useCallback(() =>
-    setCards((prev) => [...prev, { id: Math.random().toString(36).slice(2), term: '', definition: '', hint: '', isNew: true }]),
-    []
-  );
-
-  const updateRow = useCallback((cardId: string, field: keyof CardInput, value: string) => {
-    setCards((prev) => prev.map((c) => c.id === cardId ? { ...c, [field]: value } : c));
-  }, []);
-
-  const removeCard = (cardId: string) => {
-    setCards((prev) => prev.filter((c) => c.id !== cardId));
-    setDeleteCardConfirm(null);
-  };
+  const addCard = () => setCards(c => [...c, { term: '', definition: '', hint: '', isNew: true }]);
+  const removeCard = (i: number) => setCards(c => c.filter((_, idx) => idx !== i));
+  const updateCard = (i: number, field: keyof DraftCard, value: string) =>
+    setCards(c => c.map((card, idx) => idx === i ? { ...card, [field]: value } : card));
 
   const handleSave = async () => {
-    if (!set || !title.trim()) return;
-    setSaving(true);
-    await onUpdateSet(id!, {
-      title: title.trim(),
-      description: description.trim() || undefined,
-      category: category.trim() || undefined,
-    });
-    const validCards = cards.filter((c) => c.term.trim() && c.definition.trim());
-    await onSaveCards(id!, validCards.map((c) => ({
-      id: c.isNew ? undefined : c.id,
-      term: c.term.trim(),
-      definition: c.definition.trim(),
-      hint: c.hint.trim() || undefined,
-      isNew: c.isNew,
-    })));
-    navigate(`/set/${id}`);
+    if (!title.trim()) { setError('제목을 입력하세요.'); return; }
+    const validCards = cards.filter(c => c.term.trim() && c.definition.trim());
+    if (validCards.length === 0) { setError('카드를 최소 1개 이상 추가하세요.'); return; }
+    setLoading(true); setError('');
+    try {
+      await onUpdateSet(id!, { title: title.trim(), description: description.trim() || undefined, category: category.trim() || undefined });
+      await onSaveCards(id!, validCards.map(c => ({ id: c.id, term: c.term.trim(), definition: c.definition.trim(), hint: c.hint.trim() || undefined, isNew: c.isNew })));
+      navigate(`/set/${id}`);
+    } catch {
+      setError('저장에 실패했습니다.');
+    }
+    setLoading(false);
   };
 
-  if (!set) return null;
-
-  const validCount = cards.filter((c) => c.term.trim() && c.definition.trim()).length;
-
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
+          <ChevronLeft size={15} /> 뒤로
         </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-100">세트 편집</h1>
-          <p className="text-sm text-slate-400 mt-0.5">{validCount}개 카드</p>
-        </div>
-        <Button onClick={handleSave} disabled={!title.trim()} loading={saving}>
-          <Save className="w-4 h-4" /> 저장
-        </Button>
+        <h1 style={{ fontSize: 18, fontWeight: 800 }}>세트 편집</h1>
+        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={loading}>
+          {loading ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} /> : <Save size={14} />}
+          저장
+        </button>
       </div>
 
-      <div className="glass rounded-2xl p-6 mb-6 card-glow space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
-            제목 <span className="text-red-400">*</span>
-          </label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-transparent text-xl font-semibold text-slate-100 placeholder:text-slate-600 focus:outline-none border-b-2 border-slate-700 focus:border-blue-500 pb-2 transition-colors" />
-        </div>
-        <div>
-          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-            placeholder="설명을 추가하세요..."
-            className="w-full bg-transparent text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none border-b border-slate-800 focus:border-slate-600 pb-2 transition-colors" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">카테고리</label>
-            <input type="text" value={category} onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-800/60 rounded-xl text-sm text-slate-200 border border-slate-700 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" />
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>제목 *</label>
+            <input type="text" className="input" value={title} onChange={e => setTitle(e.target.value)} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>카테고리</label>
+              <input type="text" className="input" placeholder="카테고리" value={category} onChange={e => setCategory(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>설명</label>
+              <input type="text" className="input" placeholder="설명" value={description} onChange={e => setDescription(e.target.value)} />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-3 mb-4">
-        {cards.map((card, index) => (
-          <div key={card.id} className="glass rounded-2xl p-5 card-glow group">
-            <div className="flex items-start gap-3">
-              <div className="flex items-center gap-2 pt-2.5">
-                <GripVertical className="w-4 h-4 text-slate-600 cursor-grab" />
-                <span className="text-xs font-bold text-slate-600 w-6 text-center">{index + 1}</span>
-              </div>
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">단어</label>
-                  <textarea value={card.term} onChange={(e) => updateRow(card.id, 'term', e.target.value)} rows={2}
-                    className="w-full px-3 py-2.5 bg-slate-800/60 rounded-xl text-sm text-slate-200 border border-slate-700 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">뜻</label>
-                  <textarea value={card.definition} onChange={(e) => updateRow(card.id, 'definition', e.target.value)} rows={2}
-                    className="w-full px-3 py-2.5 bg-slate-800/60 rounded-xl text-sm text-slate-200 border border-slate-700 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none transition-all" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">힌트 (선택)</label>
-                  <input type="text" value={card.hint} onChange={(e) => updateRow(card.id, 'hint', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800/60 rounded-xl text-sm text-slate-200 border border-slate-700 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" />
-                </div>
-              </div>
-              <button onClick={() => setDeleteCardConfirm(card.id)}
-                className="mt-2 p-2 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                <Trash2 className="w-4 h-4" />
+      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {cards.map((card, i) => (
+          <div key={i} className="card-row">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>카드 {i + 1}</span>
+              <button type="button" onClick={() => removeCard(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4 }}>
+                <Trash2 size={14} />
               </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>용어</label>
+                <input type="text" className="input" value={card.term} onChange={e => updateCard(i, 'term', e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>정의</label>
+                <input type="text" className="input" value={card.definition} onChange={e => updateCard(i, 'definition', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>힌트</label>
+              <input type="text" className="input" placeholder="힌트 (선택)" value={card.hint} onChange={e => updateCard(i, 'hint', e.target.value)} />
             </div>
           </div>
         ))}
       </div>
 
-      <button onClick={addRow}
-        className="w-full py-4 glass rounded-2xl border-2 border-dashed border-slate-700 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all text-slate-400 hover:text-blue-400 flex items-center justify-center gap-2 font-medium">
-        <Plus className="w-5 h-5" />
-        + 카드 추가하기
+      <button type="button" className="btn btn-secondary btn-md" onClick={addCard}>
+        <Plus size={15} /> 카드 추가
       </button>
-
-      <Modal open={!!deleteCardConfirm} onClose={() => setDeleteCardConfirm(null)} title="카드 삭제" size="sm">
-        <p className="text-slate-300 mb-6">이 카드를 삭제하시겠습니까?</p>
-        <div className="flex gap-3 justify-end">
-          <Button variant="ghost" onClick={() => setDeleteCardConfirm(null)}>취소</Button>
-          <Button variant="danger" onClick={() => removeCard(deleteCardConfirm!)}>삭제</Button>
-        </div>
-      </Modal>
     </div>
   );
 }

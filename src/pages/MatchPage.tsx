@@ -1,162 +1,135 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, CheckCircle, Timer } from 'lucide-react';
-import { shuffleArray, cn } from '../utils';
-import Button from '../components/ui/Button';
-import type { CardSet, MatchItem } from '../types';
+import { useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, Trophy, RotateCcw, Timer } from 'lucide-react';
+import { shuffleArray } from '../utils';
+import type { CardSet } from '../types';
 
 interface MatchPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
 }
 
+interface MatchItem {
+  id: string;
+  cardId: string;
+  text: string;
+  type: 'term' | 'definition';
+  matched: boolean;
+}
+
 export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
+  const set = cardSets.find(s => s.id === id);
 
-  const set = cardSets.find((s) => s.id === id);
-  const PAIRS = Math.min(6, set?.cards.length || 0);
+  const initItems = useMemo<MatchItem[]>(() => {
+    if (!set) return [];
+    const cards = set.cards.slice(0, 8);
+    const terms: MatchItem[] = cards.map(c => ({ id: `t-${c.id}`, cardId: c.id, text: c.term, type: 'term', matched: false }));
+    const defs: MatchItem[] = cards.map(c => ({ id: `d-${c.id}`, cardId: c.id, text: c.definition, type: 'definition', matched: false }));
+    return shuffleArray([...terms, ...defs]);
+  }, [set]);
 
-  const [items, setItems] = useState<MatchItem[]>([]);
+  const [items, setItems] = useState<MatchItem[]>(initItems);
   const [selected, setSelected] = useState<string | null>(null);
-  const [wrongPair, setWrongPair] = useState<[string, string] | null>(null);
-  const [completed, setCompleted] = useState(false);
-  const [moves, setMoves] = useState(0);
+  const [wrong, setWrong] = useState<string[]>([]);
+  const [finished, setFinished] = useState(false);
   const [startTime] = useState(Date.now());
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [timer, setTimer] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
-  const generateItems = useCallback(() => {
-    if (!set || set.cards.length === 0) return;
-    const selected = shuffleArray(set.cards).slice(0, PAIRS);
-    const newItems: MatchItem[] = [
-      ...selected.map((c: { id: string; term: string }) => ({ id: `term-${c.id}`, text: c.term, type: 'term' as const, cardId: c.id, isMatched: false, isSelected: false })),
-      ...selected.map((c: { id: string; definition: string }) => ({ id: `def-${c.id}`, text: c.definition, type: 'definition' as const, cardId: c.id, isMatched: false, isSelected: false })),
-    ];
-    setItems(shuffleArray(newItems));
-    setSelected(null);
-    setWrongPair(null);
-    setCompleted(false);
-    setMoves(0);
-    setElapsedTime(0);
-  }, [set, PAIRS]);
+  const handleSelect = async (itemId: string) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item || item.matched) return;
 
-  useEffect(() => { generateItems(); }, [generateItems]);
-
-  useEffect(() => {
-    if (completed) return;
-    const interval = setInterval(() => setTimer(Math.floor((Date.now() - startTime) / 1000)), 1000);
-    return () => clearInterval(interval);
-  }, [completed, startTime]);
-
-  const handleClick = (itemId: string) => {
-    if (completed || wrongPair) return;
-    const item = items.find((i) => i.id === itemId);
-    if (!item || item.isMatched) return;
+    if (!selected) {
+      setSelected(itemId);
+      return;
+    }
     if (selected === itemId) { setSelected(null); return; }
-    if (!selected) { setSelected(itemId); return; }
-    const prev = items.find((i) => i.id === selected);
-    if (!prev) { setSelected(itemId); return; }
-    if (prev.type === item.type) { setSelected(itemId); return; }
 
-    setMoves((m) => m + 1);
-
-    if (prev.cardId === item.cardId) {
-      const updated = items.map((i) => i.id === selected || i.id === itemId ? { ...i, isMatched: true, isSelected: false } : i);
-      setItems(updated);
-      onUpdateStat(prev.cardId, true);
+    const prev = items.find(i => i.id === selected)!;
+    if (prev.cardId === item.cardId && prev.type !== item.type) {
+      const next = items.map(i => i.id === selected || i.id === itemId ? { ...i, matched: true } : i);
+      setItems(next);
       setSelected(null);
-      if (updated.every((i) => i.isMatched)) {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
-        setCompleted(true);
+      await onUpdateStat(item.cardId, true);
+      if (next.every(i => i.matched)) {
+        setElapsed(Date.now() - startTime);
+        setFinished(true);
       }
     } else {
-      setWrongPair([selected, itemId]);
-      setTimeout(() => { setWrongPair(null); setSelected(null); }, 700);
+      setWrong([selected, itemId]);
+      await onUpdateStat(item.cardId, false);
+      setTimeout(() => { setWrong([]); setSelected(null); }, 800);
     }
   };
 
-  const matchedCount = items.filter((i) => i.isMatched).length / 2;
-  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const restart = () => {
+    setItems(shuffleArray(initItems.map(i => ({ ...i, matched: false }))));
+    setSelected(null);
+    setWrong([]);
+    setFinished(false);
+  };
 
-  if (!set || set.cards.length === 0) { navigate(`/set/${id}`); return null; }
-
-  if (completed) {
+  if (!set || set.cards.length < 2) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="max-w-sm w-full mx-auto text-center">
-          <div className="glass rounded-3xl p-10 card-glow">
-            <div className="w-20 h-20 rounded-full gradient-success flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-green-500/30">
-              <CheckCircle className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="text-3xl font-bold text-slate-100 mb-2">완료!</h2>
-            <p className="text-slate-400 mb-8">모든 쌍을 매칭했습니다</p>
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <div className="bg-slate-800/60 rounded-2xl p-4">
-                <div className="text-2xl font-bold text-blue-400">{formatTime(elapsedTime)}</div>
-                <div className="text-xs text-slate-500 mt-1">소요시간</div>
-              </div>
-              <div className="bg-slate-800/60 rounded-2xl p-4">
-                <div className="text-2xl font-bold text-violet-400">{moves}</div>
-                <div className="text-xs text-slate-500 mt-1">시도 횟수</div>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Button onClick={generateItems} size="lg" className="w-full"><RotateCcw className="w-4 h-4" /> 다시 하기</Button>
-              <Button variant="ghost" onClick={() => navigate(`/set/${id}`)} className="w-full">세트로 돌아가기</Button>
-            </div>
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <p style={{ color: 'var(--text-2)', marginBottom: 16 }}>카드가 2개 이상 필요합니다.</p>
+        <button className="btn btn-secondary btn-md" onClick={() => navigate(-1)}>돌아가기</button>
+      </div>
+    );
+  }
+
+  if (finished) {
+    const sec = Math.round(elapsed / 1000);
+    return (
+      <div style={{ maxWidth: 400, margin: '60px auto', textAlign: 'center' }}>
+        <div style={{ width: 80, height: 80, background: 'var(--green-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <Trophy size={32} color="var(--green)" />
+        </div>
+        <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>완료!</h2>
+        <p style={{ color: 'var(--text-2)', marginBottom: 20 }}>모든 카드를 매칭했습니다</p>
+        <div className="stat-card" style={{ marginBottom: 24 }}>
+          <div className="stat-value" style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Timer size={24} /> {sec}초
           </div>
+          <div className="stat-label">완료 시간</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button className="btn btn-secondary btn-md" onClick={restart}><RotateCcw size={15} /> 다시</button>
+          <button className="btn btn-primary btn-md" onClick={() => navigate(`/set/${id}`)}>세트로</button>
         </div>
       </div>
     );
   }
 
+  const matched = items.filter(i => i.matched).length / 2;
+  const total = items.length / 2;
+
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(`/set/${id}`)} className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
+          <ChevronLeft size={15} /> {set.title}
         </button>
-        <div className="flex-1">
-          <h1 className="text-lg font-bold text-slate-100">카드 맞추기</h1>
-          <p className="text-sm text-slate-400">{set.title}</p>
-        </div>
-        <div className="flex items-center gap-4 text-sm text-slate-400">
-          <span className="flex items-center gap-1.5"><Timer className="w-4 h-4" />{formatTime(timer)}</span>
-          <span>{matchedCount}/{PAIRS} 완료</span>
-        </div>
-        <button onClick={generateItems} className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors">
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{matched} / {total} 매칭</span>
       </div>
 
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-6">
-        <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 transition-all" style={{ width: `${(matchedCount / PAIRS) * 100}%` }} />
+      <div className="progress-track" style={{ marginBottom: 24 }}>
+        <div className="progress-fill" style={{ width: `${(matched / total) * 100}%` }} />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {items.map((item) => {
-          const isSelected = selected === item.id;
-          const isWrong = wrongPair?.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleClick(item.id)}
-              disabled={item.isMatched}
-              className={cn(
-                'p-4 rounded-2xl border text-sm font-medium text-left transition-all min-h-[80px] flex items-center justify-center text-center leading-snug',
-                item.isMatched ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 opacity-60 cursor-default' :
-                isWrong ? 'border-red-500 bg-red-500/20 text-red-300 scale-95' :
-                isSelected ? 'border-blue-500 bg-blue-500/20 text-blue-300 scale-[1.02] shadow-lg shadow-blue-500/20' :
-                'glass border-slate-700 text-slate-300 hover:border-slate-500 hover:bg-white/[0.08] hover:scale-[1.01] active:scale-95 card-glow'
-              )}
-            >
-              {item.text}
-            </button>
-          );
-        })}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+        {items.map(item => (
+          <button
+            key={item.id}
+            onClick={() => handleSelect(item.id)}
+            className={`match-btn ${item.matched ? 'matched' : wrong.includes(item.id) ? 'wrong' : selected === item.id ? 'selected' : ''}`}
+          >
+            {item.text}
+          </button>
+        ))}
       </div>
-      <p className="text-center text-xs text-slate-600 mt-6">단어와 뜻을 클릭해서 매칭하세요</p>
     </div>
   );
 }

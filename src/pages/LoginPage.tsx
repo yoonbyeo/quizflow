@@ -1,169 +1,140 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Mail, Lock, Eye, EyeOff, Chrome } from 'lucide-react';
+import { Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../hooks/useAuth';
-import { cn } from '../utils';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleGoogle = async () => {
+    setLoading(true); setError('');
+    const { error } = await signInWithGoogle();
+    if (error) setError(error.message);
+    setLoading(false);
+  };
+
+  const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setMessage('');
-
-    if (mode === 'login') {
-      const { error } = await signInWithEmail(email, password);
-      if (error) {
-        setError('이메일 또는 비밀번호가 올바르지 않습니다.');
-      } else {
-        navigate('/');
-      }
+    setLoading(true); setError(''); setSuccess('');
+    const fn = mode === 'login' ? signInWithEmail : signUpWithEmail;
+    const { error } = await fn(email, password);
+    if (error) {
+      setError(error.message);
+    } else if (mode === 'signup') {
+      setSuccess('인증 메일을 확인해 주세요!');
     } else {
-      const { error } = await signUpWithEmail(email, password);
-      if (error) {
-        setError(error.message.includes('already')
-          ? '이미 가입된 이메일입니다.'
-          : '회원가입 중 오류가 발생했습니다.');
-      } else {
-        setMessage('확인 이메일을 보냈습니다. 이메일을 확인해주세요.');
-      }
+      navigate('/');
     }
     setLoading(false);
   };
 
-  const handleGoogle = async () => {
-    setLoading(true);
-    setError('');
-    await signInWithGoogle();
-    setLoading(false);
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-violet-500/10 rounded-full blur-3xl" />
-      </div>
-
-      <div className="w-full max-w-md relative">
+    <div className="login-page">
+      <div className="login-card">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-2xl shadow-blue-500/30">
-              <Zap className="w-6 h-6 text-white" fill="currentColor" />
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div className="logo-icon">
+              <Zap size={16} color="#fff" fill="#fff" />
             </div>
-            <span className="text-3xl font-bold tracking-tight gradient-text">QuizFlow</span>
+            <span className="logo-text" style={{ fontSize: 22 }}>QuizFlow</span>
           </div>
-          <p className="text-slate-400 text-sm">스마트한 플래시카드 학습</p>
+          <p style={{ fontSize: 13.5, color: 'var(--text-2)', marginTop: 4 }}>스마트한 학습을 시작하세요</p>
         </div>
 
-        <div className="glass rounded-3xl p-8 card-glow">
-          {/* Tab */}
-          <div className="flex gap-1 p-1 bg-slate-800/60 rounded-xl mb-6">
-            {(['login', 'signup'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(''); setMessage(''); }}
-                className={cn(
-                  'flex-1 py-2 rounded-lg text-sm font-semibold transition-all',
-                  mode === m ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
-                )}
-              >
-                {m === 'login' ? '로그인' : '회원가입'}
-              </button>
-            ))}
+        {/* Tab */}
+        <div className="tab-group" style={{ marginBottom: 24 }}>
+          <button className={`tab-btn ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>로그인</button>
+          <button className={`tab-btn ${mode === 'signup' ? 'active' : ''}`} onClick={() => setMode('signup')}>회원가입</button>
+        </div>
+
+        {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+        {success && <div className="alert alert-success" style={{ marginBottom: 16 }}>{success}</div>}
+
+        {/* Google */}
+        <button
+          onClick={handleGoogle}
+          disabled={loading}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            padding: '11px 16px',
+            background: '#fff',
+            color: '#0d1117',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,.3)',
+            transition: 'opacity .15s',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.909-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          Google로 {mode === 'login' ? '로그인' : '회원가입'}
+        </button>
+
+        <div className="divider" style={{ marginBottom: 16 }}>또는</div>
+
+        {/* Email form */}
+        <form onSubmit={handleEmail} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ position: 'relative' }}>
+            <Mail size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
+            <input
+              type="email"
+              className="input"
+              style={{ paddingLeft: 38 }}
+              placeholder="이메일"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
           </div>
-
-          {/* Google */}
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white text-slate-800 rounded-xl font-semibold text-sm hover:bg-slate-100 transition-all shadow-lg mb-4 disabled:opacity-60"
-          >
-            <Chrome className="w-5 h-5 text-blue-500" />
-            Google로 {mode === 'login' ? '로그인' : '회원가입'}
-          </button>
-
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px bg-slate-700" />
-            <span className="text-xs text-slate-500">또는</span>
-            <div className="flex-1 h-px bg-slate-700" />
-          </div>
-
-          {/* Email form */}
-          <form onSubmit={handleEmailAuth} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">이메일</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="hello@example.com"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">비밀번호</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                  className="w-full pl-10 pr-10 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-                {error}
-              </p>
-            )}
-            {message && (
-              <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
-                {message}
-              </p>
-            )}
-
+          <div style={{ position: 'relative' }}>
+            <Lock size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
+            <input
+              type={showPw ? 'text' : 'password'}
+              className="input"
+              style={{ paddingLeft: 38, paddingRight: 38 }}
+              placeholder="비밀번호 (6자 이상)"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              minLength={6}
+              required
+            />
             <button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="w-full py-3 gradient-primary rounded-xl text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.01] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              type="button"
+              onClick={() => setShowPw(!showPw)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
             >
-              {loading ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
+              {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
-          </form>
-        </div>
+          </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
-          로그인하면 이용약관 및 개인정보처리방침에 동의하는 것으로 간주됩니다.
-        </p>
+          <button type="submit" className="btn btn-primary btn-md" disabled={loading} style={{ marginTop: 4 }}>
+            {loading ? (
+              <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
+            ) : null}
+            {mode === 'login' ? '로그인' : '회원가입'}
+          </button>
+        </form>
       </div>
     </div>
   );

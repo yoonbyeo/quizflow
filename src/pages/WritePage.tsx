@@ -1,9 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, ChevronRight, RotateCcw, Trophy } from 'lucide-react';
-import { shuffleArray, checkWrittenAnswer, cn } from '../utils';
-import Button from '../components/ui/Button';
-import type { Card, CardSet } from '../types';
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, CheckCircle, XCircle, RotateCcw, Trophy } from 'lucide-react';
+import { shuffleArray, checkWrittenAnswer } from '../utils';
+import type { CardSet } from '../types';
 
 interface WritePageProps {
   cardSets: CardSet[];
@@ -11,166 +10,115 @@ interface WritePageProps {
 }
 
 export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
+  const set = cardSets.find(s => s.id === id);
 
-  const set = cardSets.find((s) => s.id === id);
-  const [cards, setCards] = useState<Card[]>(() => shuffleArray(set?.cards || []));
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [cards] = useState(() => set ? shuffleArray([...set.cards]) : []);
+  const [idx, setIdx] = useState(0);
   const [input, setInput] = useState('');
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [results, setResults] = useState<boolean[]>([]);
-  const [completed, setCompleted] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
 
-  if (!set || set.cards.length === 0) { navigate(`/set/${id}`); return null; }
-
-  const current = cards[currentIndex];
-  const correctCount = results.filter(Boolean).length;
-
-  const handleSubmit = useCallback(() => {
-    if (isAnswered || !input.trim()) return;
-    const correct = checkWrittenAnswer(input, current.definition);
-    setIsCorrect(correct);
-    setIsAnswered(true);
-    setResults((r) => [...r, correct]);
-    onUpdateStat(current.id, correct);
-  }, [isAnswered, input, current, onUpdateStat]);
-
-  const handleNext = useCallback(() => {
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex((i) => i + 1);
-      setInput('');
-      setIsAnswered(false);
-      setIsCorrect(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    } else {
-      setCompleted(true);
-    }
-  }, [currentIndex, cards.length]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (!isAnswered) handleSubmit();
-      else handleNext();
-    }
-  };
-
-  const handleReset = () => {
-    setCards(shuffleArray(set.cards));
-    setCurrentIndex(0);
-    setInput('');
-    setIsAnswered(false);
-    setIsCorrect(false);
-    setResults([]);
-    setCompleted(false);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  };
-
-  if (completed) {
-    const accuracy = Math.round((correctCount / cards.length) * 100);
+  if (!set || cards.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="max-w-sm w-full mx-auto text-center">
-          <div className="glass rounded-3xl p-10 card-glow">
-            <div className="w-20 h-20 rounded-full gradient-primary flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-blue-500/30">
-              <Trophy className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="text-3xl font-bold text-slate-100 mb-2">완료!</h2>
-            <p className={cn('text-4xl font-black mb-2', accuracy >= 80 ? 'text-emerald-400' : accuracy >= 60 ? 'text-yellow-400' : 'text-red-400')}>
-              {accuracy}%
-            </p>
-            <p className="text-slate-400 mb-8">{correctCount} / {cards.length} 정답</p>
-            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-8">
-              <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${accuracy}%` }} />
-            </div>
-            <div className="flex flex-col gap-3">
-              <Button onClick={handleReset} size="lg" className="w-full"><RotateCcw className="w-4 h-4" /> 다시 하기</Button>
-              <Button variant="ghost" onClick={() => navigate(`/set/${id}`)} className="w-full">세트로 돌아가기</Button>
-            </div>
-          </div>
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <p style={{ color: 'var(--text-2)', marginBottom: 16 }}>카드가 없습니다.</p>
+        <button className="btn btn-secondary btn-md" onClick={() => navigate(-1)}>돌아가기</button>
+      </div>
+    );
+  }
+
+  if (finished) {
+    const pct = Math.round((score / cards.length) * 100);
+    return (
+      <div style={{ maxWidth: 400, margin: '60px auto', textAlign: 'center' }}>
+        <div style={{ width: 80, height: 80, background: pct >= 70 ? 'var(--green-bg)' : 'var(--blue-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <Trophy size={32} color={pct >= 70 ? 'var(--green)' : 'var(--blue)'} />
+        </div>
+        <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>완료!</h2>
+        <p style={{ color: 'var(--text-2)', marginBottom: 20 }}>{cards.length}문제 중 {score}개 정답</p>
+        <div className="stat-card" style={{ marginBottom: 24 }}>
+          <div className="stat-value" style={{ color: pct >= 70 ? 'var(--green)' : 'var(--blue)' }}>{pct}%</div>
+          <div className="stat-label">정답률</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button className="btn btn-secondary btn-md" onClick={() => { setIdx(0); setInput(''); setSubmitted(false); setScore(0); setFinished(false); }}>
+            <RotateCcw size={15} /> 다시
+          </button>
+          <button className="btn btn-primary btn-md" onClick={() => navigate(`/set/${id}`)}>세트로</button>
         </div>
       </div>
     );
   }
 
+  const card = cards[idx];
+  const pct = Math.round((idx / cards.length) * 100);
+
+  const submit = async () => {
+    const isCorrect = checkWrittenAnswer(input, card.definition);
+    setCorrect(isCorrect);
+    setSubmitted(true);
+    if (isCorrect) setScore(s => s + 1);
+    await onUpdateStat(card.id, isCorrect);
+  };
+
+  const next = () => {
+    if (idx + 1 >= cards.length) { setFinished(true); return; }
+    setIdx(i => i + 1);
+    setInput('');
+    setSubmitted(false);
+  };
+
   return (
-    <div className="max-w-xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(`/set/${id}`)} className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+    <div style={{ maxWidth: 600, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
+          <ChevronLeft size={15} /> {set.title}
         </button>
-        <div className="flex-1">
-          <div className="flex justify-between text-sm text-slate-400 mb-1">
-            <span>쓰기 연습</span>
-            <span>{currentIndex + 1} / {cards.length}</span>
-          </div>
-          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 transition-all" style={{ width: `${(currentIndex / cards.length) * 100}%` }} />
-          </div>
-        </div>
-        <button onClick={handleReset} className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.08] transition-colors">
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{idx + 1} / {cards.length}</span>
       </div>
 
-      <div className="flex gap-4 mb-6 text-sm">
-        <span className="flex items-center gap-1.5 text-emerald-400"><CheckCircle className="w-4 h-4" /> {correctCount}</span>
-        <span className="flex items-center gap-1.5 text-red-400"><XCircle className="w-4 h-4" /> {results.length - correctCount}</span>
+      <div className="progress-track" style={{ marginBottom: 24 }}>
+        <div className="progress-fill" style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="glass rounded-2xl p-8 card-glow mb-4">
-        <p className="text-xs text-slate-500 uppercase tracking-wider mb-4">단어</p>
-        <h2 className="text-2xl font-bold text-slate-100 mb-8 leading-snug">{current.term}</h2>
-        {current.hint && (
-          <p className="text-sm text-yellow-400/70 mb-4 flex items-start gap-1.5">
-            <span className="text-yellow-400">💡</span> 힌트: {current.hint}
-          </p>
-        )}
-        <div className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => !isAnswered && setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="뜻을 입력하세요..."
-            disabled={isAnswered}
-            autoFocus
-            className={cn(
-              'w-full px-4 py-4 rounded-xl border text-base transition-all focus:outline-none focus:ring-2',
-              isAnswered
-                ? isCorrect
-                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300 focus:ring-emerald-500/20'
-                  : 'border-red-500 bg-red-500/10 text-red-300 focus:ring-red-500/20'
-                : 'border-slate-700 bg-slate-800/60 text-slate-200 focus:border-blue-500/50 focus:ring-blue-500/20'
-            )}
-          />
-          {isAnswered && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2">
-              {isCorrect ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <XCircle className="w-5 h-5 text-red-400" />}
+      <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>용어</p>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 24, lineHeight: 1.4 }}>{card.term}</h2>
+        {card.hint && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>힌트: {card.hint}</p>}
+
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>정의를 입력하세요:</p>
+        <textarea
+          className="input"
+          rows={3}
+          placeholder="여기에 정의를 입력..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          disabled={submitted}
+          autoFocus
+        />
+
+        {submitted && (
+          <div className={`alert ${correct ? 'alert-success' : 'alert-error'}`} style={{ marginTop: 12 }}>
+            {correct ? <CheckCircle size={15} /> : <XCircle size={15} />}
+            <div>
+              <div style={{ fontWeight: 700 }}>{correct ? '정답!' : '틀렸습니다.'}</div>
+              {!correct && <div style={{ fontSize: 13, marginTop: 2 }}>정답: {card.definition}</div>}
             </div>
-          )}
-        </div>
-        {isAnswered && !isCorrect && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <p className="text-xs text-slate-400 mb-1">정답:</p>
-            <p className="text-sm text-emerald-300 font-medium">{current.definition}</p>
           </div>
         )}
       </div>
 
-      <div className="flex justify-end gap-3">
-        {!isAnswered ? (
-          <Button onClick={handleSubmit} disabled={!input.trim()}>제출 <ChevronRight className="w-4 h-4" /></Button>
-        ) : (
-          <Button onClick={handleNext}>
-            {currentIndex < cards.length - 1 ? '다음' : '결과 보기'} <ChevronRight className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
-      <p className="text-center text-xs text-slate-600 mt-3">Enter로 제출 · 다음 이동</p>
+      {!submitted ? (
+        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submit} disabled={!input.trim()}>제출</button>
+      ) : (
+        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={next}>
+          {idx + 1 >= cards.length ? '결과 보기' : '다음'} →
+        </button>
+      )}
     </div>
   );
 }
