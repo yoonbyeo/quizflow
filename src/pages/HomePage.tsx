@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Zap, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
 import InfoTooltip from '../components/ui/InfoTooltip';
-import { loadLastMode } from './FlashcardPage';
+import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
+import { loadTestProgress, loadTestCompleted } from './TestPage';
 import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
 import { loadStreak } from '../utils/streak';
 import { loadAllSessions } from '../hooks/useStudySync';
@@ -12,7 +13,9 @@ import type { CardSet, CardStat, Folder } from '../types';
 const MODE_META = {
   flashcard: { label: '플래시카드', color: 'var(--blue)', path: (id: string) => `/flashcard/${id}` },
   learn:     { label: '학습하기',   color: 'var(--purple)', path: (id: string) => `/learn/${id}` },
+  test:      { label: '테스트',     color: 'var(--green)', path: (id: string) => `/test/${id}` },
   match:     { label: '매칭',       color: 'var(--yellow)', path: (id: string) => `/match/${id}` },
+  write:     { label: '쓰기',       color: '#f0883e', path: (id: string) => `/write/${id}` },
 } as const;
 
 interface HomePageProps {
@@ -111,6 +114,10 @@ function SetCard({ set, onClick, expanded, onToggleExpand }: {
           <Zap size={12} /> 플래시
         </button>
         <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
+          onClick={() => navigate(`/test/${set.id}`)}>
+          <PenLine size={12} /> 테스트
+        </button>
+        <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
           onClick={() => navigate(`/match/${set.id}`)}>
           <Shuffle size={12} /> 매칭
         </button>
@@ -181,17 +188,37 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
 
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 
-  // 가장 최근에 공부한 세트 — 학습하기(learn)만 이어하기 표시
+  // 완료 여부: Supabase 우선 → localStorage fallback
+  const isCompleted = (setId: string, mode: string): boolean => {
+    const cloud = sessionMap[setId]?.[mode];
+    if (cloud !== undefined) return cloud.completed;
+    if (mode === 'flashcard') return loadCompleted(setId, 'flashcard');
+    if (mode === 'test') return loadTestCompleted(setId);
+    if (mode === 'learn') return loadLearnCompleted(setId);
+    return false;
+  };
+
+  // 마지막 모드: Supabase updated_at 기준 → localStorage fallback
+  const getLastMode = (setId: string): string => {
+    const modes = sessionMap[setId];
+    if (modes) {
+      const entries = Object.entries(modes).filter(([m]) => m !== 'review');
+      if (entries.length > 0) {
+        entries.sort((a, b) => new Date(b[1].updated_at).getTime() - new Date(a[1].updated_at).getTime());
+        return entries[0][0];
+      }
+    }
+    return loadLastMode(setId) ?? 'flashcard';
+  };
+
+  // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
+  // 플래시카드와 매칭은 이어하기에서 제외 (단순 열람 모드)
   const inProgress = [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
-      // Supabase에 learn 세션이 있고 미완료인 경우만
-      const learnCloud = sessionMap[s.id]?.['learn'];
-      if (learnCloud !== undefined) return !learnCloud.completed;
-      // Supabase 세션이 아예 없는 경우 localStorage 확인 (learn만)
-      const localMode = loadLastMode(s.id);
-      if (localMode !== 'learn') return false;
-      return !loadLearnCompleted(s.id);
+      const lastMode = getLastMode(s.id);
+      if (lastMode === 'match' || lastMode === 'flashcard') return false;
+      return !isCompleted(s.id, lastMode);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
@@ -267,18 +294,45 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {inProgress.map(set => {
               const total = set.cards.length;
-              const meta = MODE_META['learn'];
+              const lastMode = getLastMode(set.id);
+              const meta = MODE_META[lastMode as keyof typeof MODE_META] ?? MODE_META.flashcard;
 
-              // learn 진행도: Supabase 우선 → localStorage fallback
-              const cloudSession = sessionMap[set.id]?.['learn'];
-              const cloudMastered = typeof cloudSession?.progress?.mastered === 'number' ? cloudSession.progress.mastered : null;
-              const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
-              const localProg = loadLearnProgress(set.id);
-              const viewedCount = cloudMastered ?? localProg?.mastered ?? 0;
-              const viewedTotal = cloudTotal ?? localProg?.total ?? total;
+              // ── 모드별 진행도 계산: Supabase 우선 → localStorage fallback ──
+              let viewedCount = 0;
+              let viewedTotal = total;
+
+              const cloudSession = sessionMap[set.id]?.[lastMode];
+              if (lastMode === 'flashcard') {
+                const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
+                const savedIdx = cloudIdx ?? loadProgress(set.id);
+                viewedCount = Math.min(savedIdx + 1, total);
+                viewedTotal = total;
+              } else if (lastMode === 'test') {
+                const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
+                const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
+                const localProg = loadTestProgress(set.id);
+                viewedCount = cloudIdx ?? localProg?.idx ?? 0;
+                viewedTotal = cloudTotal ?? localProg?.total ?? total;
+              } else if (lastMode === 'learn') {
+                const cloudMastered = typeof cloudSession?.progress?.mastered === 'number' ? cloudSession.progress.mastered : null;
+                const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
+                const localProg = loadLearnProgress(set.id);
+                viewedCount = cloudMastered ?? localProg?.mastered ?? 0;
+                viewedTotal = cloudTotal ?? localProg?.total ?? total;
+              } else {
+                const cardStatMap = set.studyStats?.cardStats ?? {};
+                viewedCount = set.cards.filter(c => cardStatMap[c.id]).length;
+                viewedTotal = total;
+              }
 
               const pct = viewedTotal > 0 ? Math.round((viewedCount / viewedTotal) * 100) : 0;
-              const continuePath = `${meta.path(set.id)}?resume=1`;
+
+              // 플래시카드는 savedIdx에서 이어서, 나머지는 ?resume=1로 바로 시작
+              const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
+              const savedIdx = cloudIdx ?? loadProgress(set.id);
+              const continuePath = lastMode === 'flashcard'
+                ? `${meta.path(set.id)}?start=${savedIdx >= total - 1 ? 0 : savedIdx}`
+                : `${meta.path(set.id)}?resume=1`;
 
               return (
                 <div key={set.id} className="card card-hover"
@@ -313,7 +367,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
                       {pct}% 완료 · {viewedCount}/{viewedTotal}개
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                      숙달 기준
+                      {lastMode === 'flashcard' ? '열람 기준' : lastMode === 'test' ? '제출 기준' : lastMode === 'learn' ? '숙달 기준' : '학습 기준'}
                     </span>
                   </div>
 
@@ -338,6 +392,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
           {[
             { icon: Zap, label: '낱말카드', sub: '플래시카드', color: 'var(--blue)', bg: 'var(--blue-bg)', path: cardSets[0] ? `/flashcard/${cardSets[0].id}` : '/library' },
             { icon: Brain, label: '학습하기', sub: '적응형 학습', color: 'var(--purple)', bg: 'var(--purple-bg)', path: cardSets[0] ? `/learn/${cardSets[0].id}` : '/library' },
+            { icon: PenLine, label: '테스트', sub: '실력 점검', color: 'var(--green)', bg: 'var(--green-bg)', path: cardSets[0] ? `/test/${cardSets[0].id}` : '/library' },
             { icon: Shuffle, label: '카드 맞추기', sub: '매칭 게임', color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: cardSets[0] ? `/match/${cardSets[0].id}` : '/library' },
             { icon: Plus, label: '새 세트', sub: '직접 만들기', color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: '/create' },
           ].map(({ icon: Icon, label, sub, color, bg, path }) => (

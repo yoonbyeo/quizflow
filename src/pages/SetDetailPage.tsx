@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Zap, Shuffle, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
+import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import { cardsToCSV, downloadCSV } from '../utils/csv';
@@ -129,9 +129,19 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       info: '플래시카드로 전체 카드를 먼저 훑은 뒤, 틀린 카드를 객관식·주관식으로 반복 출제합니다.\n틀린 카드는 큐에 다시 추가되어 모두 맞힐 때까지 반복합니다.\n진행 상태가 저장되어 중간에 나가도 이어서 학습할 수 있습니다.',
     },
     {
+      label: '테스트', icon: PenLine, color: 'var(--green)', bg: 'var(--green-bg)', path: `/test/${id}`,
+      desc: '객관식 · 주관식',
+      info: '설정한 문제 수만큼 객관식·주관식 문제를 출제합니다.\n오답 선택지는 같은 세트의 다른 카드에서 랜덤으로 구성됩니다.\nA/B/C/D 키보드 단축키로 빠르게 답할 수 있습니다.',
+    },
+    {
       label: '매칭', icon: Shuffle, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/match/${id}`,
       desc: '짝 맞추기 게임',
       info: '용어와 정의가 화면에 섞여 나옵니다.\n올바른 용어-정의 쌍을 클릭해서 연결하세요.\n모두 맞출수록 랭킹 시간이 기록됩니다.',
+    },
+    {
+      label: '쓰기', icon: BookText, color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: `/write/${id}`,
+      desc: '직접 입력 학습',
+      info: '정의를 보고 용어를 직접 타이핑합니다.\n정확히 입력하면 정답 처리되며, 틀리면 오답 노트에 기록됩니다.\n직접 쓰는 방식이라 장기 기억에 효과적입니다.',
     },
   ];
 

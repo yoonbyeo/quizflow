@@ -45,7 +45,7 @@ export interface CardStat {
   difficulty: 'easy' | 'medium' | 'hard' | 'unrated';
 }
 
-export type StudyMode = 'flashcard' | 'match' | 'learn';
+export type StudyMode = 'flashcard' | 'test' | 'match' | 'write' | 'learn';
 
 export interface TestQuestion {
   id: string;
@@ -56,6 +56,16 @@ export interface TestQuestion {
   options?: string[];
   userAnswer?: string;
   isCorrect?: boolean;
+}
+
+export interface TestSession {
+  id: string;
+  setId: string;
+  questions: TestQuestion[];
+  startedAt: number;
+  completedAt?: number;
+  score?: number;
+  totalQuestions: number;
 }
 
 export interface MatchItem {
@@ -69,3 +79,10 @@ export interface MatchItem {
 
 export type SortOrder = 'created' | 'updated' | 'alphabetical' | 'size';
 
+export interface TestConfig {
+  questionCount: number;
+  answerWith: 'definition' | 'term' | 'both';
+  includeMultipleChoice: boolean;
+  includeWritten: boolean;
+  includeTrueFalse: boolean;
+}
