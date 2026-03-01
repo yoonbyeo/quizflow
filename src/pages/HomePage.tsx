@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
 import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
 import { loadTestProgress, loadTestCompleted } from './TestPage';
 import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
+import { loadStreak } from '../utils/streak';
 import type { CardSet, CardStat, Folder } from '../types';
 
 // 모드 → 경로/라벨/색상 매핑
@@ -135,6 +136,18 @@ function SetCard({ set, onClick, expanded, onToggleExpand }: {
 export default function HomePage({ cardSets, loading }: HomePageProps) {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const streak = loadStreak();
+
+  // 오늘 복습 대상 카드 수
+  const now = Date.now();
+  const dueCount = cardSets.reduce((total, set) =>
+    total + set.cards.filter(card => {
+      const stat = set.studyStats?.cardStats?.[card.id];
+      if (!stat) return false; // 한번도 안한건 제외 (신규는 직접 학습으로)
+      if (!stat.nextReview) return false;
+      return stat.nextReview <= now;
+    }).length, 0
+  );
 
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 
@@ -179,6 +192,32 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+
+      {/* ── 스트릭 배너 ── */}
+      {streak >= 2 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: 'linear-gradient(135deg, rgba(210,153,34,.12), rgba(240,136,62,.08))', border: '1px solid rgba(210,153,34,.25)', borderRadius: 12, marginBottom: 24 }}>
+          <Flame size={20} color="var(--yellow)" fill="var(--yellow)" />
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--yellow)' }}>{streak}일 연속 학습 중!</span>
+            <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>오늘도 학습을 이어가세요.</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 오늘의 복습 ── */}
+      {dueCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', background: 'linear-gradient(135deg, var(--purple-bg), var(--blue-bg))', border: '1px solid rgba(110,64,201,.25)', borderRadius: 12, marginBottom: 24, cursor: 'pointer' }}
+          onClick={() => navigate('/review')}>
+          <div style={{ width: 40, height: 40, background: 'rgba(110,64,201,.2)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <RefreshCw size={18} color="var(--purple)" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>오늘 복습할 카드 <span style={{ color: 'var(--purple)' }}>{dueCount}장</span></div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>간격 반복 학습으로 장기 기억을 강화하세요</div>
+          </div>
+          <ArrowRight size={16} color="var(--text-3)" />
+        </div>
+      )}
 
       {/* ── 멈춘 지점에서 계속하기 ── */}
       {inProgress.length > 0 && (

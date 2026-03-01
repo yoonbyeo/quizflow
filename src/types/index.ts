@@ -39,6 +39,8 @@ export interface CardStat {
   correct: number;
   incorrect: number;
   lastReviewed?: number;
+  nextReview?: number; // 다음 복습 예정일 (timestamp)
+  interval?: number;   // 현재 복습 간격 (일)
   streak: number;
   difficulty: 'easy' | 'medium' | 'hard' | 'unrated';
 }

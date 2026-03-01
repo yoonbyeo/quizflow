@@ -17,6 +17,7 @@ import LearnPage from './pages/LearnPage';
 import StatsPage from './pages/StatsPage';
 import WrongNotePage from './pages/WrongNotePage';
 import ProfilePage from './pages/ProfilePage';
+import ReviewPage from './pages/ReviewPage';
 
 function Spinner() {
   return (
@@ -67,6 +68,7 @@ function AppContent() {
                 <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/stats" element={<StatsPage cardSets={cardSets} />} />
                 <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} />} />
+                <Route path="/review" element={<ReviewPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/profile" element={<ProfilePage user={user} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

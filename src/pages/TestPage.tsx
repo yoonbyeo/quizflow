@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
@@ -244,6 +244,42 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const isWritten = q.type === 'written';
   const progressPct = Math.round((qIdx / questions.length) * 100);
 
+  // 키보드 단축키 (객관식: A/B/C/D 선택, Enter 제출/다음)
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const quizStateRef = useRef({ submitted, correct, selected, isWritten, q, written });
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => { quizStateRef.current = { submitted, correct, selected, isWritten, q, written }; });
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const { submitted: sub, isWritten: isW, q: curQ, written: curW } = quizStateRef.current;
+      // 주관식 입력 중 Enter → 제출
+      if (isW && target.tagName === 'INPUT' && e.key === 'Enter' && !sub && curW.trim()) {
+        submit();
+        return;
+      }
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (sub) next();
+        else if (!isW && quizStateRef.current.selected) submit();
+        return;
+      }
+      // 객관식 A/B/C/D
+      if (!isW && !sub) {
+        const idx = ['a', 'b', 'c', 'd'].indexOf(e.key.toLowerCase());
+        if (idx >= 0 && idx < (curQ.options?.length ?? 0)) {
+          e.preventDefault();
+          setSelected(curQ.options![idx]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
   const submit = async () => {
     if (submitted) return;
     const answer = isWritten ? written : selected ?? '';
@@ -344,6 +380,22 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
           {qIdx + 1 >= questions.length ? '결과 보기' : '다음 문제'} →
         </button>
       )}
+
+      {/* 키보드 단축키 안내 */}
+      <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+        {!isWritten && !submitted && [
+          { key: 'A', desc: '1번' }, { key: 'B', desc: '2번' }, { key: 'C', desc: '3번' }, { key: 'D', desc: '4번' },
+        ].map(({ key, desc }) => (
+          <span key={key} style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <kbd style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace', fontSize: 11 }}>{key}</kbd>
+            {desc}
+          </span>
+        ))}
+        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <kbd style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace', fontSize: 11 }}>Enter</kbd>
+          {submitted ? '다음' : '제출'}
+        </span>
+      </div>
     </div>
   );
 }

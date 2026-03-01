@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { recordStudyActivity } from '../utils/streak';
 import type { CardSet, Card, CardStat, Folder } from '../types';
 
 function generateId() {
@@ -28,6 +29,8 @@ function dbSetToCardSet(dbSet: any, dbCards: any[], dbStats: any[]): CardSet {
         cardId: stat.card_id,
         correct: stat.correct,
         incorrect: stat.incorrect,
+        nextReview: stat.next_review ? new Date(stat.next_review).getTime() : undefined,
+        interval: stat.interval ?? undefined,
         streak: stat.streak,
         difficulty: stat.difficulty,
         lastReviewed: stat.last_reviewed ? new Date(stat.last_reviewed).getTime() : undefined,
@@ -236,6 +239,7 @@ export function useCardSets(userId: string | undefined) {
   // ── Stats ──
   const upsertCardStat = useCallback(async (cardId: string, isCorrect: boolean) => {
     if (!userId) return;
+    recordStudyActivity(); // 스트릭 + 캘린더 기록
     const existing = await supabase
       .from('card_stats').select('*').eq('user_id', userId).eq('card_id', cardId).single();
 
@@ -244,6 +248,21 @@ export function useCardSets(userId: string | undefined) {
     const newCorrect = (prev?.correct ?? 0) + (isCorrect ? 1 : 0);
     const newIncorrect = (prev?.incorrect ?? 0) + (isCorrect ? 0 : 1);
     const difficulty = newStreak >= 5 ? 'easy' : newStreak >= 2 ? 'medium' : newIncorrect > newCorrect ? 'hard' : 'unrated';
+
+    // SM-2 간략화: 정답이면 인터벌 증가, 오답이면 1일로 리셋
+    const INTERVALS = [1, 3, 7, 14, 30, 60];
+    const prevInterval = prev?.interval ?? 0;
+    const prevIntervalIdx = INTERVALS.indexOf(prevInterval);
+    let newInterval: number;
+    if (isCorrect) {
+      const nextIdx = Math.min(prevIntervalIdx + 1, INTERVALS.length - 1);
+      newInterval = prevIntervalIdx < 0 ? INTERVALS[0] : INTERVALS[nextIdx];
+    } else {
+      newInterval = 1;
+    }
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+    const nextReviewTimestamp = nextReviewDate.getTime();
 
     await supabase.from('card_stats').upsert({
       id: prev?.id ?? generateId(),
@@ -254,6 +273,8 @@ export function useCardSets(userId: string | undefined) {
       streak: newStreak,
       difficulty,
       last_reviewed: new Date().toISOString(),
+      next_review: nextReviewDate.toISOString(),
+      interval: newInterval,
     }, { onConflict: 'user_id,card_id' });
 
     setCardSets((prev) => prev.map((set) => {
@@ -266,7 +287,16 @@ export function useCardSets(userId: string | undefined) {
           lastStudied: Date.now(),
           cardStats: {
             ...set.studyStats.cardStats,
-            [cardId]: { cardId, correct: newCorrect, incorrect: newIncorrect, streak: newStreak, difficulty: difficulty as CardStat['difficulty'], lastReviewed: Date.now() },
+            [cardId]: {
+              cardId,
+              correct: newCorrect,
+              incorrect: newIncorrect,
+              streak: newStreak,
+              difficulty: difficulty as CardStat['difficulty'],
+              lastReviewed: Date.now(),
+              nextReview: nextReviewTimestamp,
+              interval: newInterval,
+            },
           },
         },
       };

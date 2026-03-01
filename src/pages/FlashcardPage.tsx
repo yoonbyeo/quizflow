@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RotateCcw, ThumbsUp, ThumbsDown, Shuffle, Settings } from 'lucide-react';
 import { shuffleArray } from '../utils';
@@ -67,6 +67,44 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
     saveProgress(id, idx);
     saveCompleted(id, 'flashcard', idx >= cards.length - 1);
   }, [id, idx, cards.length]);
+
+  // 최신 state를 ref로 유지 (키보드 핸들러에서 클로저 문제 방지)
+  const stateRef = useRef({ idx, flipped, cards, rated });
+  useEffect(() => { stateRef.current = { idx, flipped, cards, rated }; });
+
+  // 키보드 단축키
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // 입력 필드 포커스 중이면 무시
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      const { idx: curIdx, flipped: curFlipped, cards: curCards } = stateRef.current;
+      switch (e.key) {
+        case ' ':
+        case 'ArrowUp':
+        case 'ArrowDown':
+          e.preventDefault();
+          setFlipped(f => !f);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (curIdx < curCards.length - 1) go(curIdx + 1);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (curIdx > 0) go(curIdx - 1);
+          break;
+        case '1':
+          if (curFlipped) { e.preventDefault(); rate(true); }
+          break;
+        case '2':
+          if (curFlipped) { e.preventDefault(); rate(false); }
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleShuffle = useCallback(() => {
     setCards(shuffleArray([...(set?.cards ?? [])]));
@@ -203,6 +241,21 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         <button className="btn btn-secondary btn-md" onClick={() => go(idx + 1)} disabled={idx === cards.length - 1}>
           <ChevronRight size={16} />
         </button>
+      </div>
+
+      {/* 키보드 단축키 안내 */}
+      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+        {[
+          { key: 'Space', desc: '뒤집기' },
+          { key: '← →', desc: '이전/다음' },
+          { key: '1', desc: '알아요' },
+          { key: '2', desc: '모름' },
+        ].map(({ key, desc }) => (
+          <span key={key} style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <kbd style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace', fontSize: 11 }}>{key}</kbd>
+            {desc}
+          </span>
+        ))}
       </div>
 
       {/* 마지막 카드 도달 시 */}

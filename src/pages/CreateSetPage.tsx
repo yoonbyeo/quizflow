@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ChevronLeft, Zap, Image, X } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, Zap, Image, X, FileUp } from 'lucide-react';
+import { parseCSV } from '../utils/csv';
 import type { Folder } from '../types';
 
 interface CreateSetPageProps {
@@ -20,6 +21,7 @@ interface DraftCard {
 export default function CreateSetPage({ onCreate, folders, onUploadImage }: CreateSetPageProps) {
   const navigate = useNavigate();
   const fileRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const csvRef = useRef<HTMLInputElement | null>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -31,6 +33,24 @@ export default function CreateSetPage({ onCreate, folders, onUploadImage }: Crea
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [csvInfo, setCsvInfo] = useState('');
+
+  const handleCsvImport = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) { setError('CSV에서 카드를 읽을 수 없습니다. 형식을 확인하세요.'); return; }
+      const newCards: DraftCard[] = parsed.map(c => ({ term: c.term, definition: c.definition, hint: c.hint ?? '' }));
+      setCards(prev => {
+        const empty = prev.filter(c => !c.term && !c.definition);
+        return empty.length === prev.length ? newCards : [...prev.filter(c => c.term || c.definition), ...newCards];
+      });
+      setCsvInfo(`CSV에서 ${parsed.length}개 카드를 가져왔습니다.`);
+      setTimeout(() => setCsvInfo(''), 3000);
+    };
+    reader.readAsText(file, 'utf-8');
+  };
 
   const addCard = () => setCards(c => [...c, { term: '', definition: '', hint: '' }]);
   const removeCard = (i: number) => setCards(c => c.filter((_, idx) => idx !== i));
@@ -178,10 +198,20 @@ export default function CreateSetPage({ onCreate, folders, onUploadImage }: Crea
           ))}
         </div>
 
+        {csvInfo && <div className="alert alert-success" style={{ marginBottom: 12, fontSize: 13 }}>{csvInfo}</div>}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary btn-md" onClick={addCard}>
-            <Plus size={15} /> 카드 추가
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-secondary btn-md" onClick={addCard}>
+              <Plus size={15} /> 카드 추가
+            </button>
+            <input type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} ref={csvRef}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvImport(f); e.target.value = ''; }} />
+            <button type="button" className="btn btn-secondary btn-md" onClick={() => csvRef.current?.click()}
+              title="CSV 파일에서 카드 가져오기 (용어,정의,힌트 형식)">
+              <FileUp size={15} /> CSV 가져오기
+            </button>
+          </div>
           <button type="submit" className="btn btn-primary btn-md" disabled={loading}>
             {loading
               ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />

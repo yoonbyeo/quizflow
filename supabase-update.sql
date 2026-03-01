@@ -26,3 +26,7 @@ alter table cards add column if not exists image_url text;
 -- 4. Supabase Storage 버킷 생성 (Storage 탭에서 수동으로 해야 할 수도 있음)
 -- insert into storage.buckets (id, name, public) values ('card-images', 'card-images', true)
 -- on conflict do nothing;
+
+-- 5. card_stats에 스페이스드 리피티션 컬럼 추가
+alter table card_stats add column if not exists next_review timestamptz;
+alter table card_stats add column if not exists interval integer default 1;

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
+import { cardsToCSV, downloadCSV } from '../utils/csv';
 import type { CardSet, CardStat } from '../types';
 
 interface SetDetailPageProps {
@@ -119,9 +120,16 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
             <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6, lineHeight: 1.3 }}>{set.title}</h1>
             {set.description && <p style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.7 }}>{set.description}</p>}
           </div>
-          <Link to={`/edit/${id}`} className="btn btn-secondary btn-sm" style={{ flexShrink: 0 }}>
-            <Edit2 size={14} /> 편집
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-secondary btn-sm"
+              onClick={() => downloadCSV(cardsToCSV(set.cards, set.title), set.title)}
+              title="CSV로 내보내기">
+              <Download size={14} /> CSV
+            </button>
+            <Link to={`/edit/${id}`} className="btn btn-secondary btn-sm">
+              <Edit2 size={14} /> 편집
+            </Link>
+          </div>
         </div>
 
         {total > 0 && (

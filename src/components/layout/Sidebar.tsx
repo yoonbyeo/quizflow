@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight, Flame, RefreshCw } from 'lucide-react';
 import { signOut } from '../../hooks/useAuth';
+import { loadStreak } from '../../utils/streak';
 import type { User } from '@supabase/supabase-js';
 import type { CardSet, Folder as FolderType } from '../../types';
 
@@ -26,10 +27,23 @@ export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCo
     return total + set.cards.filter(c => (stats[c.id]?.incorrect ?? 0) > 0).length;
   }, 0);
 
+  const streak = loadStreak();
+
+  // 오늘 복습 대상 카드 수
+  const now = Date.now();
+  const dueCount = cardSets.reduce((total, set) =>
+    total + set.cards.filter(card => {
+      const stat = set.studyStats?.cardStats?.[card.id];
+      if (!stat?.nextReview) return false;
+      return stat.nextReview <= now;
+    }).length, 0
+  );
+
   const nav = [
     { to: '/', label: '홈', icon: Home },
     { to: '/library', label: '라이브러리', icon: Library },
     { to: '/folders', label: '폴더', icon: Folder },
+    { to: '/review', label: '오늘 복습', icon: RefreshCw, badge: dueCount > 0 ? dueCount : null },
     { to: '/wrong-note', label: '오답 노트', icon: AlertCircle, badge: wrongCardCount > 0 ? wrongCardCount : null },
     { to: '/stats', label: '통계', icon: BarChart2 },
   ];
@@ -143,6 +157,17 @@ export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCo
           </Link>
         )}
       </nav>
+
+      {/* 스트릭 */}
+      {streak > 0 && (
+        <div style={{ padding: collapsed ? '8px 0' : '8px 14px', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 6 }}
+          title={`${streak}일 연속 학습 중!`}>
+          <Flame size={15} color="var(--yellow)" fill="var(--yellow)" style={{ flexShrink: 0 }} />
+          {!collapsed && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--yellow)' }}>{streak}일 연속</span>
+          )}
+        </div>
+      )}
 
       {/* 프로필 */}
       {user && (
