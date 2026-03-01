@@ -152,8 +152,10 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
 
   // Supabase 세션 데이터 (비동기 로드)
   const [sessionMap, setSessionMap] = useState<SessionMap>({});
+  const [sessionLoaded, setSessionLoaded] = useState(!userId); // userId 없으면 바로 완료
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { setSessionLoaded(true); return; }
+    setSessionLoaded(false);
     loadAllSessions(userId).then(rows => {
       const map: SessionMap = {};
       for (const row of rows) {
@@ -161,6 +163,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
         map[row.set_id][row.mode] = { progress: row.progress, completed: row.completed, updated_at: row.updated_at };
       }
       setSessionMap(map);
+      setSessionLoaded(true);
     });
   }, [userId, cardSets]);
 
@@ -213,12 +216,12 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
   };
 
   // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
-  // 플래시카드와 매칭은 이어하기에서 제외 (단순 열람 모드)
-  const inProgress = [...cardSets]
+  // 학습하기(learn)만 이어하기 표시, Supabase 세션 로드 완료 후에만 계산
+  const inProgress = !sessionLoaded ? [] : [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
       const lastMode = getLastMode(s.id);
-      if (lastMode === 'match' || lastMode === 'flashcard' || lastMode === 'test') return false;
+      if (lastMode !== 'learn') return false;
       return !isCompleted(s.id, lastMode);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
