@@ -132,9 +132,11 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, masteredSet, flashIdx, sortedCards.length]);
 
-  // resume=1 이면 설정 화면 건너뛰고 바로 시작
+  // resume=1 이면 설정 화면 건너뛰고 바로 시작 — set이 준비되면 실행
+  const [resumed, setResumed] = useState(false);
   useEffect(() => {
-    if (!resume || !set || set.cards.length === 0) return;
+    if (!resume || resumed || !set || set.cards.length === 0) return;
+    setResumed(true); // 한 번만 실행
 
     const cfg: LearnConfig = (id ? loadLearnConfig(id) : null) ??
       { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
@@ -181,8 +183,9 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       setQueuePos(0);
       setScreen('practice');
     }
+  // set이 준비되면 실행 (cardSets 비동기 로드 대응)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [set, resume]);
 
   const startLearn = () => {
     if (id) { saveLearnConfig(id, config); saveLearnCompleted(id, false); }

@@ -77,22 +77,24 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
 
-  // resume=1 이면 설정 화면 건너뛰고 바로 시작
+  // resume=1 이면 설정 화면 건너뛰고 바로 시작 — set이 준비되면 실행
+  const [resumed, setResumed] = useState(false);
   useEffect(() => {
-    if (resume && set && set.cards.length >= 2) {
-      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
-      const qs = buildQuestions(set, cfg);
-      setQuestions(qs);
-      setQIdx(0);
-      setSelected(null);
-      setWritten('');
-      setSubmitted(false);
-      setScore(0);
-      setAnswers([]);
-      setScreen('quiz');
-    }
+    if (!resume || resumed || !set || set.cards.length < 2) return;
+    setResumed(true);
+    const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
+    const qs = buildQuestions(set, cfg);
+    setQuestions(qs);
+    setQIdx(0);
+    setSelected(null);
+    setWritten('');
+    setSubmitted(false);
+    setScore(0);
+    setAnswers([]);
+    setScreen('quiz');
+  // set이 준비되면 실행 (cardSets 비동기 로드 대응)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [set, resume]);
 
   if (!set || set.cards.length < 2) {
     return (
