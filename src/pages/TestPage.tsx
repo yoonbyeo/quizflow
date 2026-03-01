@@ -19,6 +19,13 @@ export function saveTestProgress(setId: string, idx: number, total: number) {
 export function loadTestProgress(setId: string): { idx: number; total: number } | null {
   try { const v = localStorage.getItem(`qf-testprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
+
+export function saveTestCompleted(setId: string, done: boolean) {
+  try { localStorage.setItem(`qf-completed-test-${setId}`, done ? '1' : '0'); } catch {}
+}
+export function loadTestCompleted(setId: string): boolean {
+  try { return localStorage.getItem(`qf-completed-test-${setId}`) === '1'; } catch { return false; }
+}
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
@@ -116,6 +123,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setScore(0);
     setAnswers([]);
     setShowReview(false);
+    if (id) saveTestCompleted(id, false);
   };
 
   // ── Config screen ──
@@ -250,7 +258,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const next = () => {
     if (qIdx + 1 >= questions.length) {
       setScreen('result');
-      if (id) saveTestProgress(id, questions.length, questions.length);
+      if (id) { saveTestProgress(id, questions.length, questions.length); saveTestCompleted(id, true); }
       return;
     }
     setQIdx(i => i + 1);

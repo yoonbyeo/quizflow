@@ -21,6 +21,13 @@ export function loadLearnProgress(setId: string): { mastered: number; total: num
   try { const v = localStorage.getItem(`qf-learnprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
+export function saveLearnCompleted(setId: string, done: boolean) {
+  try { localStorage.setItem(`qf-completed-learn-${setId}`, done ? '1' : '0'); } catch {}
+}
+export function loadLearnCompleted(setId: string): boolean {
+  try { return localStorage.getItem(`qf-completed-learn-${setId}`) === '1'; } catch { return false; }
+}
+
 interface LearnPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
@@ -178,7 +185,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   }, []);
 
   const startLearn = () => {
-    if (id) saveLearnConfig(id, config);
+    if (id) { saveLearnConfig(id, config); saveLearnCompleted(id, false); }
     const cards = buildSorted();
     setSortedCards(cards);
     setFlashResults([]);
@@ -205,6 +212,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
 
   const goToPractice = (cards: CardSet['cards']) => {
     if (!config.includeMultipleChoice && !config.includeWritten) {
+      if (id) saveLearnCompleted(id, true);
       setScreen('result');
       return;
     }
@@ -347,6 +355,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     const currentItemIdx = practiceQueue[queuePos];
     if (currentItemIdx === undefined) {
       // 큐 소진 = 완료
+      if (id) saveLearnCompleted(id, true);
       setScreen('result');
       return null;
     }

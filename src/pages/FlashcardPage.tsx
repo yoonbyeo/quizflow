@@ -18,6 +18,14 @@ export function loadProgress(setId: string): number {
   try { return Math.max(0, parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0); } catch { return 0; }
 }
 
+// ── 완료 여부 저장/불러오기 ──
+export function saveCompleted(setId: string, mode: string, done: boolean) {
+  try { localStorage.setItem(`qf-completed-${mode}-${setId}`, done ? '1' : '0'); } catch {}
+}
+export function loadCompleted(setId: string, mode: string): boolean {
+  try { return localStorage.getItem(`qf-completed-${mode}-${setId}`) === '1'; } catch { return false; }
+}
+
 // ── 마지막 학습 모드 저장/불러오기 ──
 export type LastMode = 'flashcard' | 'learn' | 'test' | 'match' | 'write';
 export function saveLastMode(setId: string, mode: LastMode) {
@@ -53,10 +61,12 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
   const [answerWith, setAnswerWith] = useState<'definition' | 'term'>('definition');
   const [showSettings, setShowSettings] = useState(false);
 
-  // idx가 바뀔 때마다 localStorage에 저장
+  // idx가 바뀔 때마다 localStorage에 저장, 마지막 카드면 완료 표시
   useEffect(() => {
-    if (id) saveProgress(id, idx);
-  }, [id, idx]);
+    if (!id) return;
+    saveProgress(id, idx);
+    saveCompleted(id, 'flashcard', idx >= cards.length - 1);
+  }, [id, idx, cards.length]);
 
   const handleShuffle = useCallback(() => {
     setCards(shuffleArray([...(set?.cards ?? [])]));
@@ -83,7 +93,7 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
     setFlipped(false);
     setCards([...(set?.cards ?? [])]);
     setRated(new Set());
-    if (id) saveProgress(id, 0);
+    if (id) { saveProgress(id, 0); saveCompleted(id, 'flashcard', false); }
   };
 
   if (!set || cards.length === 0) {

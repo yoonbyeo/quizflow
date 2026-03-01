@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { loadProgress, loadLastMode } from './FlashcardPage';
-import { loadTestProgress } from './TestPage';
-import { loadLearnProgress } from './LearnPage';
+import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
+import { loadTestProgress, loadTestCompleted } from './TestPage';
+import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
 import type { CardSet, CardStat, Folder } from '../types';
 
 // 모드 → 경로/라벨/색상 매핑
@@ -138,9 +138,17 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
 
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 
-  // 가장 최근에 공부한 세트 (진행 중) — 최대 2개
+  // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
   const inProgress = [...cardSets]
-    .filter(s => s.studyStats?.lastStudied)
+    .filter(s => {
+      if (!s.studyStats?.lastStudied) return false;
+      const lastMode = loadLastMode(s.id) ?? 'flashcard';
+      // 모드별 완료 여부 확인
+      if (lastMode === 'flashcard') return !loadCompleted(s.id, 'flashcard');
+      if (lastMode === 'test') return !loadTestCompleted(s.id);
+      if (lastMode === 'learn') return !loadLearnCompleted(s.id);
+      return true; // match, write는 완료 추적 없음 — 항상 표시
+    })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
 
