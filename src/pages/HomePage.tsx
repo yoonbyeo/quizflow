@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
 import InfoTooltip from '../components/ui/InfoTooltip';
-import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
-import { loadTestProgress, loadTestCompleted } from './TestPage';
+import { loadLastMode } from './FlashcardPage';
 import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
 import { loadStreak } from '../utils/streak';
 import { loadAllSessions } from '../hooks/useStudySync';
@@ -188,39 +187,17 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
 
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 
-  // 완료 여부: Supabase 우선 → localStorage fallback
-  const isCompleted = (setId: string, mode: string): boolean => {
-    const cloud = sessionMap[setId]?.[mode];
-    if (cloud !== undefined) return cloud.completed;
-    if (mode === 'flashcard') return loadCompleted(setId, 'flashcard');
-    if (mode === 'test') return loadTestCompleted(setId);
-    if (mode === 'learn') return loadLearnCompleted(setId);
-    return false;
-  };
-
-  // 마지막 모드: Supabase updated_at 기준 → localStorage fallback
-  const getLastMode = (setId: string): string => {
-    const modes = sessionMap[setId];
-    if (modes) {
-      const entries = Object.entries(modes).filter(([m]) => m !== 'review');
-      if (entries.length > 0) {
-        entries.sort((a, b) => new Date(b[1].updated_at).getTime() - new Date(a[1].updated_at).getTime());
-        return entries[0][0];
-      }
-    }
-    return loadLastMode(setId) ?? 'flashcard';
-  };
-
   // 가장 최근에 공부한 세트 — 학습하기(learn)만 이어하기 표시
-  // learn 세션이 존재하고 미완료인 경우에만 표시
   const inProgress = [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
+      // Supabase에 learn 세션이 있고 미완료인 경우만
       const learnCloud = sessionMap[s.id]?.['learn'];
       if (learnCloud !== undefined) return !learnCloud.completed;
+      // Supabase 세션이 아예 없는 경우 localStorage 확인 (learn만)
       const localMode = loadLastMode(s.id);
       if (localMode !== 'learn') return false;
-      return !isCompleted(s.id, 'learn');
+      return !loadLearnCompleted(s.id);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
@@ -296,45 +273,18 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {inProgress.map(set => {
               const total = set.cards.length;
-              const lastMode = getLastMode(set.id);
-              const meta = MODE_META[lastMode as keyof typeof MODE_META] ?? MODE_META.flashcard;
+              const meta = MODE_META['learn'];
 
-              // ── 모드별 진행도 계산: Supabase 우선 → localStorage fallback ──
-              let viewedCount = 0;
-              let viewedTotal = total;
-
-              const cloudSession = sessionMap[set.id]?.[lastMode];
-              if (lastMode === 'flashcard') {
-                const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
-                const savedIdx = cloudIdx ?? loadProgress(set.id);
-                viewedCount = Math.min(savedIdx + 1, total);
-                viewedTotal = total;
-              } else if (lastMode === 'test') {
-                const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
-                const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
-                const localProg = loadTestProgress(set.id);
-                viewedCount = cloudIdx ?? localProg?.idx ?? 0;
-                viewedTotal = cloudTotal ?? localProg?.total ?? total;
-              } else if (lastMode === 'learn') {
-                const cloudMastered = typeof cloudSession?.progress?.mastered === 'number' ? cloudSession.progress.mastered : null;
-                const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
-                const localProg = loadLearnProgress(set.id);
-                viewedCount = cloudMastered ?? localProg?.mastered ?? 0;
-                viewedTotal = cloudTotal ?? localProg?.total ?? total;
-              } else {
-                const cardStatMap = set.studyStats?.cardStats ?? {};
-                viewedCount = set.cards.filter(c => cardStatMap[c.id]).length;
-                viewedTotal = total;
-              }
+              // learn 진행도: Supabase 우선 → localStorage fallback
+              const cloudSession = sessionMap[set.id]?.['learn'];
+              const cloudMastered = typeof cloudSession?.progress?.mastered === 'number' ? cloudSession.progress.mastered : null;
+              const cloudTotal = typeof cloudSession?.progress?.total === 'number' ? cloudSession.progress.total : null;
+              const localProg = loadLearnProgress(set.id);
+              const viewedCount = cloudMastered ?? localProg?.mastered ?? 0;
+              const viewedTotal = cloudTotal ?? localProg?.total ?? total;
 
               const pct = viewedTotal > 0 ? Math.round((viewedCount / viewedTotal) * 100) : 0;
-
-              // 플래시카드는 savedIdx에서 이어서, 나머지는 ?resume=1로 바로 시작
-              const cloudIdx = typeof cloudSession?.progress?.idx === 'number' ? cloudSession.progress.idx : null;
-              const savedIdx = cloudIdx ?? loadProgress(set.id);
-              const continuePath = lastMode === 'flashcard'
-                ? `${meta.path(set.id)}?start=${savedIdx >= total - 1 ? 0 : savedIdx}`
-                : `${meta.path(set.id)}?resume=1`;
+              const continuePath = `${meta.path(set.id)}?resume=1`;
 
               return (
                 <div key={set.id} className="card card-hover"
@@ -369,7 +319,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
                       {pct}% 완료 · {viewedCount}/{viewedTotal}개
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                      {lastMode === 'flashcard' ? '열람 기준' : lastMode === 'test' ? '제출 기준' : lastMode === 'learn' ? '숙달 기준' : '학습 기준'}
+                      숙달 기준
                     </span>
                   </div>
 
