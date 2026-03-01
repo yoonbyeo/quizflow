@@ -215,14 +215,17 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
     return loadLastMode(setId) ?? 'flashcard';
   };
 
-  // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
-  // 학습하기(learn)만 이어하기 표시, Supabase 세션 로드 완료 후에만 계산
+  // 가장 최근에 공부한 세트 — 학습하기(learn)만, Supabase 세션 로드 완료 후에만 계산
+  // learn 세션이 존재하고 미완료인 경우에만 표시
   const inProgress = !sessionLoaded ? [] : [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
-      const lastMode = getLastMode(s.id);
-      if (lastMode !== 'learn') return false;
-      return !isCompleted(s.id, lastMode);
+      const learnSession = sessionMap[s.id]?.['learn'];
+      if (learnSession) return !learnSession.completed;
+      // Supabase에 없으면 localStorage 확인
+      const localMode = loadLastMode(s.id);
+      if (localMode !== 'learn') return false;
+      return !isCompleted(s.id, 'learn');
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
