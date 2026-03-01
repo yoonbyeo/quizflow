@@ -65,8 +65,19 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     if (id) { const saved = loadTestConfig(id); if (saved) return saved; }
     return DEFAULT_CONFIG;
   });
-  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');
-  const [questions, setQuestions] = useState<TestQuestion[]>([]);
+
+  // resume=1이고 set이 이미 준비된 경우 초기 state에서 바로 quiz 시작
+  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>(() => {
+    if (resume && set && set.cards.length >= 2) return 'quiz';
+    return 'config';
+  });
+  const [questions, setQuestions] = useState<TestQuestion[]>(() => {
+    if (resume && set && set.cards.length >= 2) {
+      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
+      return buildQuestions(set, cfg);
+    }
+    return [];
+  });
 
   const [qIdx, setQIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -77,22 +88,23 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
 
-  // resume=1 이면 설정 화면 건너뛰고 바로 시작 — set이 준비되면 실행
+  // set이 비동기로 늦게 로드되는 경우(Supabase) 대비 — resume이면 set 준비 후 시작
   const [resumed, setResumed] = useState(false);
   useEffect(() => {
     if (!resume || resumed || !set || set.cards.length < 2) return;
     setResumed(true);
-    const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
-    const qs = buildQuestions(set, cfg);
-    setQuestions(qs);
-    setQIdx(0);
-    setSelected(null);
-    setWritten('');
-    setSubmitted(false);
-    setScore(0);
-    setAnswers([]);
-    setScreen('quiz');
-  // set이 준비되면 실행 (cardSets 비동기 로드 대응)
+    if (screen !== 'quiz' || questions.length === 0) {
+      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
+      const qs = buildQuestions(set, cfg);
+      setQuestions(qs);
+      setQIdx(0);
+      setSelected(null);
+      setWritten('');
+      setSubmitted(false);
+      setScore(0);
+      setAnswers([]);
+      setScreen('quiz');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [set, resume]);
 
@@ -238,7 +250,15 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   }
 
   // ── Quiz screen ──
-  if (questions.length === 0 || qIdx >= questions.length) return null;
+  if (questions.length === 0) {
+    // resume 중 set이 아직 로드 안 된 경우 로딩 표시
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+  if (qIdx >= questions.length) return null;
 
   const q = questions[qIdx];
   const isWritten = q.type === 'written';
