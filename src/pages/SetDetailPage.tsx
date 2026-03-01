@@ -33,15 +33,17 @@ function InlineFlashcard({ set }: { set: CardSet }) {
         </div>
       </div>
 
-      <div className="flip-card" style={{ height: 260, cursor: 'pointer', marginBottom: 16 }}
+      <div className="flip-card" style={{ height: card.imageUrl ? 340 : 260, cursor: 'pointer', marginBottom: 16 }}
         onClick={() => setFlipped(f => !f)}>
         <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
           <div className="flip-front">
-            <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>{frontLabel}</div>
-            <p style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
-            {card.imageUrl && !flipped && <img src={card.imageUrl} style={{ marginTop: 12, maxHeight: 80, borderRadius: 8, objectFit: 'contain' }} />}
-            {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>힌트: {card.hint}</p>}
-            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 20 }}>클릭하여 뒤집기</p>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>{frontLabel}</div>
+            {card.imageUrl && !flipped && (
+              <img src={card.imageUrl} style={{ maxHeight: 160, maxWidth: '90%', borderRadius: 10, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
+            )}
+            <p style={{ fontSize: card.imageUrl ? 20 : 24, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
+            {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 10 }}>힌트: {card.hint}</p>}
+            {!flipped && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 16 }}>클릭하여 뒤집기</p>}
           </div>
           <div className="flip-back">
             <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>{backLabel}</div>

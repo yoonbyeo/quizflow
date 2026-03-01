@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Menu } from 'lucide-react';
+import { Search, Plus, Menu, Sun, Moon } from 'lucide-react';
 import Sidebar from './Sidebar';
+import { useTheme } from '../../contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 import type { CardSet, Folder } from '../../types';
 
@@ -16,6 +17,7 @@ export default function Layout({ user, cardSets, folders, children }: LayoutProp
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const filtered = search.trim()
     ? cardSets.filter(s =>
@@ -58,9 +60,15 @@ export default function Layout({ user, cardSets, folders, children }: LayoutProp
             )}
           </div>
 
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/create')} style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <Plus size={15} /> 만들기
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button onClick={toggleTheme} title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-2)', padding: '6px 8px', display: 'flex', alignItems: 'center', transition: 'all .15s' }}>
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/create')}>
+              <Plus size={15} /> 만들기
+            </button>
+          </div>
         </header>
         <main className="page-body">{children}</main>
       </div>

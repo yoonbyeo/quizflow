@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { loadProgress } from './FlashcardPage';
 import type { CardSet, CardStat, Folder } from '../types';
 
 interface HomePageProps {
@@ -126,12 +127,9 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
 
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 
-  // 가장 최근에 공부한 세트 (진행 중)
+  // 가장 최근에 공부한 세트 (진행 중) — 최대 2개
   const inProgress = [...cardSets]
-    .filter(s => {
-      const stats = Object.values(s.studyStats?.cardStats ?? {}) as CardStat[];
-      return stats.length > 0 && stats.some(c => c.difficulty !== 'easy');
-    })
+    .filter(s => s.studyStats?.lastStudied)
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
 
@@ -189,7 +187,14 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     <button className="btn btn-primary btn-sm"
-                      onClick={e => { e.stopPropagation(); navigate(`/learn/${set.id}`); }}>
+                      onClick={e => {
+                        e.stopPropagation();
+                        const savedIdx = loadProgress(set.id);
+                        const total = set.cards.length;
+                        // 마지막 카드까지 갔으면 처음부터
+                        const startIdx = savedIdx >= total - 1 ? 0 : savedIdx;
+                        navigate(`/flashcard/${set.id}?start=${startIdx}`);
+                      }}>
                       계속하기
                     </button>
                   </div>

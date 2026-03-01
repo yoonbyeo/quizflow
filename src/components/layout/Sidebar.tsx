@@ -90,22 +90,25 @@ export default function Sidebar({ user, cardSets, folders, mobileOpen, onMobileC
 
       {user && (
         <div style={{ padding: '12px 8px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 8 }}>
+          <Link to="/profile" onClick={onMobileClose}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 8, textDecoration: 'none', transition: 'background .15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             {user.user_metadata?.avatar_url
-              ? <img src={user.user_metadata.avatar_url} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+              ? <img src={user.user_metadata.avatar_url} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
               : <div className="avatar">{(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}</div>
             }
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user.user_metadata?.full_name || user.email?.split('@')[0]}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>프로필 편집</div>
             </div>
-            <button onClick={handleSignOut} title="로그아웃"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, borderRadius: 6, display: 'flex' }}>
+            <button onClick={e => { e.preventDefault(); handleSignOut(); }} title="로그아웃"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, borderRadius: 6, display: 'flex', flexShrink: 0 }}>
               <LogOut size={15} />
             </button>
-          </div>
+          </Link>
         </div>
       )}
     </div>

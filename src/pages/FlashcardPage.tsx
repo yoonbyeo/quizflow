@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RotateCcw, ThumbsUp, ThumbsDown, Shuffle, Settings } from 'lucide-react';
 import { shuffleArray } from '../utils';
 import type { CardSet } from '../types';
@@ -9,13 +9,24 @@ interface FlashcardPageProps {
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
 }
 
+// 마지막 카드 인덱스를 localStorage에 저장
+function saveProgress(setId: string, idx: number) {
+  try { localStorage.setItem(`qf-progress-${setId}`, String(idx)); } catch {}
+}
+export function loadProgress(setId: string): number {
+  try { return parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0; } catch { return 0; }
+}
+
 export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
 
   const [cards, setCards] = useState(() => set ? [...set.cards] : []);
-  const [idx, setIdx] = useState(0);
+  const paramIdx = parseInt(searchParams.get('start') ?? '-1', 10);
+  const savedIdx = paramIdx >= 0 ? paramIdx : (id ? loadProgress(id) : 0);
+  const [idx, setIdx] = useState(() => Math.min(savedIdx, (set?.cards.length ?? 1) - 1));
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
   const [answerWith, setAnswerWith] = useState<'definition' | 'term'>('definition');
@@ -27,7 +38,11 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
   }, [set]);
 
   const go = (dir: 1 | -1) => {
-    setIdx(i => Math.max(0, Math.min(cards.length - 1, i + dir)));
+    setIdx(i => {
+      const next = Math.max(0, Math.min(cards.length - 1, i + dir));
+      if (id) saveProgress(id, next);
+      return next;
+    });
     setFlipped(false);
   };
 
@@ -97,16 +112,18 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
       </div>
 
       {/* Card */}
-      <div className="flip-card" style={{ height: 340, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
+      <div className="flip-card" style={{ height: card.imageUrl ? 420 : 340, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
         <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
           <div className="flip-front">
-            <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>
               {answerWith === 'definition' ? '용어' : '정의'}
             </div>
-            <p style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
-            {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 16 }}>힌트: {card.hint}</p>}
-            {card.imageUrl && !flipped && <img src={card.imageUrl} style={{ marginTop: 16, maxHeight: 100, borderRadius: 8, objectFit: 'contain' }} />}
-            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 24 }}>클릭하여 뒤집기</p>
+            {card.imageUrl && !flipped && (
+              <img src={card.imageUrl} style={{ maxHeight: 200, maxWidth: '85%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
+            )}
+            <p style={{ fontSize: card.imageUrl ? 20 : 26, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
+            {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>힌트: {card.hint}</p>}
+            {!flipped && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 16 }}>클릭하여 뒤집기</p>}
           </div>
           <div className="flip-back">
             <div style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 20 }}>

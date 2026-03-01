@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ─── Design Tokens ─── */
+/* ─── Design Tokens: Dark (default) ─── */
 :root {
   --bg: #0d1117;
   --bg-1: #161b22;
@@ -21,6 +21,35 @@
   --red-bg: rgba(248,81,73,0.15);
   --yellow: #d29922;
   --yellow-bg: rgba(210,153,34,0.15);
+  --shadow-card: 0 2px 8px rgba(0,0,0,.25);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
+  --topbar-bg: rgba(13,17,23,0.85);
+}
+
+/* ─── Design Tokens: Light ─── */
+html.light {
+  --bg: #f6f8fa;
+  --bg-1: #ffffff;
+  --bg-2: #f0f2f5;
+  --bg-3: #e4e7eb;
+  --border: rgba(0,0,0,0.09);
+  --border-hover: rgba(0,0,0,0.16);
+  --text-1: #1a1f27;
+  --text-2: #57606a;
+  --text-3: #a0a7b0;
+  --blue: #0969da;
+  --blue-bg: rgba(9,105,218,0.1);
+  --purple: #7c3aed;
+  --purple-bg: rgba(124,58,237,0.1);
+  --green: #1a7f37;
+  --green-bg: rgba(26,127,55,0.1);
+  --red: #cf222e;
+  --red-bg: rgba(207,34,46,0.1);
+  --yellow: #9a6700;
+  --yellow-bg: rgba(154,103,0,0.1);
+  --shadow-card: 0 2px 8px rgba(0,0,0,.07);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,.15);
+  --topbar-bg: rgba(246,248,250,0.9);
 }
 
 /* ─── Reset & Base ─── */
@@ -66,7 +95,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(13,17,23,0.85);
+  background: var(--topbar-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   height: 56px;
@@ -288,7 +317,7 @@ textarea.input { resize: vertical; min-height: 72px; }
   transition: border-color .2s, box-shadow .2s, transform .15s;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  box-shadow: var(--shadow-card);
 }
 .set-card::before {
   content: '';
@@ -451,7 +480,7 @@ textarea.input { resize: vertical; min-height: 72px; }
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 36px;
-  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-modal);
   position: relative;
   z-index: 1;
 }
@@ -518,7 +547,7 @@ textarea.input { resize: vertical; min-height: 72px; }
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  box-shadow: var(--shadow-modal);
   width: 100%;
   overflow: hidden;
 }
