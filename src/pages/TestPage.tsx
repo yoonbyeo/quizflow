@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
+import type { CardSet, TestQuestion, TestConfig } from '../types';
 
-// 테스트 설정 저장/불러오기
-function saveTestConfig(setId: string, cfg: any) {
+// ── localStorage 헬퍼 ──
+function saveTestConfig(setId: string, cfg: TestConfig) {
   try { localStorage.setItem(`qf-testcfg-${setId}`, JSON.stringify(cfg)); } catch {}
 }
-function loadTestConfig(setId: string): any | null {
+function loadTestConfig(setId: string): TestConfig | null {
   try { const v = localStorage.getItem(`qf-testcfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
-// 테스트 진행 인덱스 저장/불러오기 (홈 진행도용)
 export function saveTestProgress(setId: string, idx: number, total: number) {
   try { localStorage.setItem(`qf-testprog-${setId}`, JSON.stringify({ idx, total })); } catch {}
 }
@@ -27,7 +27,6 @@ export function loadTestCompleted(setId: string): boolean {
   try { return localStorage.getItem(`qf-completed-test-${setId}`) === '1'; } catch { return false; }
 }
 
-// 테스트 세션 전체 저장/불러오기 (이어하기용)
 interface TestSession {
   questions: TestQuestion[];
   qIdx: number;
@@ -43,7 +42,6 @@ function loadTestSession(setId: string): TestSession | null {
 function clearTestSession(setId: string) {
   try { localStorage.removeItem(`qf-testsession-${setId}`); } catch {}
 }
-import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
   cardSets: CardSet[];
@@ -76,94 +74,183 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const set = cardSets.find(s => s.id === id);
   const resume = searchParams.get('resume') === '1';
 
-  if (id) saveLastMode(id, 'test');
+  // 모드 저장 (훅 밖이 아닌 effect에서)
+  useEffect(() => {
+    if (id) saveLastMode(id, 'test');
+  }, [id]);
 
+  // ── 모든 state를 최상단에 선언 (훅 규칙 준수) ──
   const [config, setConfig] = useState<TestConfig>(() => {
     if (id) { const saved = loadTestConfig(id); if (saved) return saved; }
     return DEFAULT_CONFIG;
   });
 
-  // resume=1이고 저장된 세션이 있으면 바로 복원
-  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>(() => {
-    if (resume && id) {
-      const session = loadTestSession(id);
-      if (session && session.questions.length > 0 && session.qIdx < session.questions.length) return 'quiz';
-      if (set && set.cards.length >= 2) return 'quiz';
-    }
-    return 'config';
-  });
-  const [questions, setQuestions] = useState<TestQuestion[]>(() => {
-    if (resume && id) {
-      const session = loadTestSession(id);
-      if (session && session.questions.length > 0) return session.questions;
-      if (set && set.cards.length >= 2) {
-        const cfg = loadTestConfig(id) ?? DEFAULT_CONFIG;
-        return buildQuestions(set, cfg);
-      }
-    }
-    return [];
-  });
-  const [qIdx, setQIdx] = useState<number>(() => {
-    if (resume && id) {
-      const session = loadTestSession(id);
-      if (session) return session.qIdx;
-    }
-    return 0;
-  });
-  const [score, setScore] = useState<number>(() => {
-    if (resume && id) {
-      const session = loadTestSession(id);
-      if (session) return session.score;
-    }
-    return 0;
-  });
-  const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>(() => {
-    if (resume && id) {
-      const session = loadTestSession(id);
-      if (session) return session.answers;
-    }
-    return [];
-  });
-
+  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');
+  const [questions, setQuestions] = useState<TestQuestion[]>([]);
+  const [qIdx, setQIdx] = useState(0);
+  const [score, setScore] = useState(0);
+  const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [written, setWritten] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [showReview, setShowReview] = useState(false);
 
-  // set이 비동기로 늦게 로드되는 경우(Supabase) 대비 — 세션 없으면 새로 빌드
-  const [resumed, setResumed] = useState(false);
+  // ── resume 처리: set이 로드된 후 한 번만 실행 ──
+  const resumeHandled = useRef(false);
   useEffect(() => {
-    if (!resume || resumed || !set || set.cards.length < 2) return;
-    setResumed(true);
-    if (id) {
-      const session = loadTestSession(id);
-      if (session && session.questions.length > 0 && session.qIdx < session.questions.length) {
-        // 저장된 세션 복원
-        setQuestions(session.questions);
-        setQIdx(session.qIdx);
-        setScore(session.score);
-        setAnswers(session.answers);
-        setScreen('quiz');
-        return;
-      }
-    }
-    // 세션 없으면 새로 시작
-    if (screen !== 'quiz' || questions.length === 0) {
-      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
-      const qs = buildQuestions(set, cfg);
-      setQuestions(qs);
-      setQIdx(0);
+    if (!resume || !id || !set || set.cards.length < 2 || resumeHandled.current) return;
+    resumeHandled.current = true;
+
+    const session = loadTestSession(id);
+    if (session && session.questions.length > 0 && session.qIdx < session.questions.length) {
+      setQuestions(session.questions);
+      setQIdx(session.qIdx);
+      setScore(session.score);
+      setAnswers(session.answers);
+      setSubmitted(false);
       setSelected(null);
       setWritten('');
-      setSubmitted(false);
+      setCorrect(false);
+      setScreen('quiz');
+    } else {
+      // 저장된 세션 없으면 설정으로 저장된 config로 새로 시작
+      const cfg = loadTestConfig(id) ?? DEFAULT_CONFIG;
+      const qs = buildQuestions(set, cfg);
+      saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
+      setQuestions(qs);
+      setQIdx(0);
       setScore(0);
       setAnswers([]);
+      setSubmitted(false);
+      setSelected(null);
+      setWritten('');
+      setCorrect(false);
       setScreen('quiz');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [set, resume]);
+  }, [resume, id, set]);
 
+  // ── 키보드 단축키 (항상 등록, 내부에서 quiz 여부 확인) ──
+  const stateRef = useRef({ submitted, correct, selected, written, questions, qIdx, score, answers, screen });
+  useEffect(() => {
+    stateRef.current = { submitted, correct, selected, written, questions, qIdx, score, answers, screen };
+  });
+
+  const submitRef = useRef<() => void>(() => {});
+  const nextRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const { screen: sc, submitted: sub, questions: qs, qIdx: qi } = stateRef.current;
+      if (sc !== 'quiz' || qs.length === 0 || qi >= qs.length) return;
+
+      const q = qs[qi];
+      const isW = q.type === 'written';
+      const target = e.target as HTMLElement;
+
+      if (isW && target.tagName === 'INPUT' && e.key === 'Enter' && !sub && stateRef.current.written.trim()) {
+        submitRef.current();
+        return;
+      }
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (sub) nextRef.current();
+        else if (!isW && stateRef.current.selected) submitRef.current();
+        return;
+      }
+      if (!isW && !sub) {
+        const idx = ['a', 'b', 'c', 'd'].indexOf(e.key.toLowerCase());
+        if (idx >= 0 && idx < (q.options?.length ?? 0)) {
+          e.preventDefault();
+          setSelected(q.options![idx]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // ── 함수 정의 ──
+  const startQuiz = useCallback(() => {
+    if (!set) return;
+    if (id) { saveTestConfig(id, config); clearTestSession(id); }
+    const qs = buildQuestions(set, config);
+    if (id) saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
+    setQuestions(qs);
+    setQIdx(0);
+    setSelected(null);
+    setWritten('');
+    setSubmitted(false);
+    setCorrect(false);
+    setScore(0);
+    setAnswers([]);
+    setScreen('quiz');
+  }, [set, id, config]);
+
+  const resetToConfig = useCallback(() => {
+    setScreen('config');
+    setQuestions([]);
+    setQIdx(0);
+    setScore(0);
+    setAnswers([]);
+    setShowReview(false);
+    setSubmitted(false);
+    setSelected(null);
+    setWritten('');
+    setCorrect(false);
+    if (id) { saveTestCompleted(id, false); clearTestSession(id); }
+  }, [id]);
+
+  const submit = useCallback(async () => {
+    const { submitted: sub, questions: qs, qIdx: qi, score: sc, answers: ans } = stateRef.current;
+    if (sub || qs.length === 0 || qi >= qs.length) return;
+    const q = qs[qi];
+    const isW = q.type === 'written';
+    const answer = isW ? stateRef.current.written : stateRef.current.selected ?? '';
+    const isCorrect = isW ? checkWrittenAnswer(answer, q.correctAnswer) : answer === q.correctAnswer;
+
+    setCorrect(isCorrect);
+    setSubmitted(true);
+    const newScore = isCorrect ? sc + 1 : sc;
+    if (isCorrect) setScore(newScore);
+    const newAnswers = [...ans, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }];
+    setAnswers(newAnswers);
+
+    await onUpdateStat(q.cardId, isCorrect);
+    if (id) {
+      saveTestProgress(id, qi + 1, qs.length);
+      saveTestSession(id, { questions: qs, qIdx: qi, score: newScore, answers: newAnswers });
+    }
+  }, [id, onUpdateStat]);
+
+  const next = useCallback(() => {
+    const { questions: qs, qIdx: qi, score: sc, answers: ans } = stateRef.current;
+    if (qs.length === 0) return;
+    if (qi + 1 >= qs.length) {
+      setScreen('result');
+      if (id) {
+        saveTestProgress(id, qs.length, qs.length);
+        saveTestCompleted(id, true);
+        clearTestSession(id);
+      }
+      return;
+    }
+    const nextIdx = qi + 1;
+    setQIdx(nextIdx);
+    setSelected(null);
+    setWritten('');
+    setSubmitted(false);
+    setCorrect(false);
+    if (id) saveTestSession(id, { questions: qs, qIdx: nextIdx, score: sc, answers: ans });
+  }, [id]);
+
+  // ref 최신화
+  useEffect(() => { submitRef.current = submit; }, [submit]);
+  useEffect(() => { nextRef.current = next; }, [next]);
+
+  // ── 렌더링 ──
   if (!set || set.cards.length < 2) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 0' }}>
@@ -173,32 +260,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
-  const startQuiz = () => {
-    if (id) { saveTestConfig(id, config); clearTestSession(id); }
-    const qs = buildQuestions(set, config);
-    setQuestions(qs);
-    setQIdx(0);
-    setSelected(null);
-    setWritten('');
-    setSubmitted(false);
-    setScore(0);
-    setAnswers([]);
-    setScreen('quiz');
-    // 새 세션 저장
-    if (id) saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
-  };
-
-  const resetToConfig = () => {
-    setScreen('config');
-    setQuestions([]);
-    setQIdx(0);
-    setScore(0);
-    setAnswers([]);
-    setShowReview(false);
-    if (id) { saveTestCompleted(id, false); clearTestSession(id); }
-  };
-
-  // ── Config screen ──
+  // ── Config 화면 ──
   if (screen === 'config') {
     const maxQ = Math.min(set.cards.length, 20);
     return (
@@ -260,7 +322,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
-  // ── Result screen ──
+  // ── Result 화면 ──
   if (screen === 'result') {
     const pct = questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
     return (
@@ -280,7 +342,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={() => setShowReview(!showReview)}>
+          <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={() => setShowReview(v => !v)}>
             {showReview ? '답안 숨기기' : '답안 검토'}
           </button>
           <button className="btn btn-secondary btn-md" style={{ flex: 1 }} onClick={resetToConfig}>
@@ -307,95 +369,20 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     );
   }
 
-  // ── Quiz screen ──
-  if (questions.length === 0) {
-    // resume 중 set이 아직 로드 안 된 경우 로딩 표시
+  // ── Quiz 화면 ──
+  if (questions.length === 0 || screen !== 'quiz') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
         <div className="spinner" />
       </div>
     );
   }
+
   if (qIdx >= questions.length) return null;
 
   const q = questions[qIdx];
   const isWritten = q.type === 'written';
   const progressPct = Math.round((qIdx / questions.length) * 100);
-
-  // 키보드 단축키 (객관식: A/B/C/D 선택, Enter 제출/다음)
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const quizStateRef = useRef({ submitted, correct, selected, isWritten, q, written });
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => { quizStateRef.current = { submitted, correct, selected, isWritten, q, written }; });
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const { submitted: sub, isWritten: isW, q: curQ, written: curW } = quizStateRef.current;
-      // 주관식 입력 중 Enter → 제출
-      if (isW && target.tagName === 'INPUT' && e.key === 'Enter' && !sub && curW.trim()) {
-        submit();
-        return;
-      }
-      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (sub) next();
-        else if (!isW && quizStateRef.current.selected) submit();
-        return;
-      }
-      // 객관식 A/B/C/D
-      if (!isW && !sub) {
-        const idx = ['a', 'b', 'c', 'd'].indexOf(e.key.toLowerCase());
-        if (idx >= 0 && idx < (curQ.options?.length ?? 0)) {
-          e.preventDefault();
-          setSelected(curQ.options![idx]);
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
-
-  const submit = async () => {
-    if (submitted) return;
-    const answer = isWritten ? written : selected ?? '';
-    const isCorrect = isWritten ? checkWrittenAnswer(written, q.correctAnswer) : answer === q.correctAnswer;
-    setCorrect(isCorrect);
-    setSubmitted(true);
-    const newScore = isCorrect ? score + 1 : score;
-    if (isCorrect) setScore(newScore);
-    const newAnswers = [...answers, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }];
-    setAnswers(newAnswers);
-    await onUpdateStat(q.cardId, isCorrect);
-    // 진행도 저장 (홈 진행도 표시용)
-    if (id) {
-      saveTestProgress(id, qIdx + 1, questions.length);
-      // 세션 저장 (이어하기용) — 제출 후 현재 문제 인덱스까지 저장
-      saveTestSession(id, { questions, qIdx, score: newScore, answers: newAnswers });
-    }
-  };
-
-  const next = () => {
-    if (qIdx + 1 >= questions.length) {
-      setScreen('result');
-      if (id) {
-        saveTestProgress(id, questions.length, questions.length);
-        saveTestCompleted(id, true);
-        clearTestSession(id); // 완료 시 세션 삭제
-      }
-      return;
-    }
-    const nextIdx = qIdx + 1;
-    setQIdx(nextIdx);
-    setSelected(null);
-    setWritten('');
-    setSubmitted(false);
-    setCorrect(false);
-    // 다음 문제로 이동 시 세션 업데이트
-    if (id) saveTestSession(id, { questions, qIdx: nextIdx, score, answers });
-  };
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -436,7 +423,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
                 bg = 'var(--blue-bg)'; border = 'var(--blue)'; color = 'var(--blue)';
               }
               return (
-                <button key={i}
+                <button key={`${qIdx}-${i}`}
                   onClick={() => { if (!submitted) setSelected(opt); }}
                   disabled={submitted}
                   style={{ padding: '14px 18px', background: bg, border: `1px solid ${border}`, borderRadius: 10, cursor: submitted ? 'default' : 'pointer', color, fontWeight: 500, textAlign: 'left', fontSize: 14, transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -472,7 +459,6 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
         </button>
       )}
 
-      {/* 키보드 단축키 안내 */}
       <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
         {!isWritten && !submitted && [
           { key: 'A', desc: '1번' }, { key: 'B', desc: '2번' }, { key: 'C', desc: '3번' }, { key: 'D', desc: '4번' },
