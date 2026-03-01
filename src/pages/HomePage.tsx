@@ -250,6 +250,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
   }
 
   return (
+    <>
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
       {/* ── 스트릭 배너 ── */}
@@ -485,5 +486,6 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
         </div>
       </div>
     )}
+    </>
   );
 }
