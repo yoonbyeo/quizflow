@@ -26,6 +26,23 @@ export function saveTestCompleted(setId: string, done: boolean) {
 export function loadTestCompleted(setId: string): boolean {
   try { return localStorage.getItem(`qf-completed-test-${setId}`) === '1'; } catch { return false; }
 }
+
+// 테스트 세션 전체 저장/불러오기 (이어하기용)
+interface TestSession {
+  questions: TestQuestion[];
+  qIdx: number;
+  score: number;
+  answers: { q: string; correct: string; user: string; ok: boolean }[];
+}
+function saveTestSession(setId: string, session: TestSession) {
+  try { localStorage.setItem(`qf-testsession-${setId}`, JSON.stringify(session)); } catch {}
+}
+function loadTestSession(setId: string): TestSession | null {
+  try { const v = localStorage.getItem(`qf-testsession-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function clearTestSession(setId: string) {
+  try { localStorage.removeItem(`qf-testsession-${setId}`); } catch {}
+}
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
@@ -66,33 +83,72 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     return DEFAULT_CONFIG;
   });
 
-  // resume=1이고 set이 이미 준비된 경우 초기 state에서 바로 quiz 시작
+  // resume=1이고 저장된 세션이 있으면 바로 복원
   const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>(() => {
-    if (resume && set && set.cards.length >= 2) return 'quiz';
+    if (resume && id) {
+      const session = loadTestSession(id);
+      if (session && session.questions.length > 0 && session.qIdx < session.questions.length) return 'quiz';
+      if (set && set.cards.length >= 2) return 'quiz';
+    }
     return 'config';
   });
   const [questions, setQuestions] = useState<TestQuestion[]>(() => {
-    if (resume && set && set.cards.length >= 2) {
-      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
-      return buildQuestions(set, cfg);
+    if (resume && id) {
+      const session = loadTestSession(id);
+      if (session && session.questions.length > 0) return session.questions;
+      if (set && set.cards.length >= 2) {
+        const cfg = loadTestConfig(id) ?? DEFAULT_CONFIG;
+        return buildQuestions(set, cfg);
+      }
+    }
+    return [];
+  });
+  const [qIdx, setQIdx] = useState<number>(() => {
+    if (resume && id) {
+      const session = loadTestSession(id);
+      if (session) return session.qIdx;
+    }
+    return 0;
+  });
+  const [score, setScore] = useState<number>(() => {
+    if (resume && id) {
+      const session = loadTestSession(id);
+      if (session) return session.score;
+    }
+    return 0;
+  });
+  const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>(() => {
+    if (resume && id) {
+      const session = loadTestSession(id);
+      if (session) return session.answers;
     }
     return [];
   });
 
-  const [qIdx, setQIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [written, setWritten] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
-  const [score, setScore] = useState(0);
-  const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
 
-  // set이 비동기로 늦게 로드되는 경우(Supabase) 대비 — resume이면 set 준비 후 시작
+  // set이 비동기로 늦게 로드되는 경우(Supabase) 대비 — 세션 없으면 새로 빌드
   const [resumed, setResumed] = useState(false);
   useEffect(() => {
     if (!resume || resumed || !set || set.cards.length < 2) return;
     setResumed(true);
+    if (id) {
+      const session = loadTestSession(id);
+      if (session && session.questions.length > 0 && session.qIdx < session.questions.length) {
+        // 저장된 세션 복원
+        setQuestions(session.questions);
+        setQIdx(session.qIdx);
+        setScore(session.score);
+        setAnswers(session.answers);
+        setScreen('quiz');
+        return;
+      }
+    }
+    // 세션 없으면 새로 시작
     if (screen !== 'quiz' || questions.length === 0) {
       const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
       const qs = buildQuestions(set, cfg);
@@ -118,7 +174,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   }
 
   const startQuiz = () => {
-    if (id) saveTestConfig(id, config);
+    if (id) { saveTestConfig(id, config); clearTestSession(id); }
     const qs = buildQuestions(set, config);
     setQuestions(qs);
     setQIdx(0);
@@ -128,6 +184,8 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setScore(0);
     setAnswers([]);
     setScreen('quiz');
+    // 새 세션 저장
+    if (id) saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
   };
 
   const resetToConfig = () => {
@@ -137,7 +195,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setScore(0);
     setAnswers([]);
     setShowReview(false);
-    if (id) saveTestCompleted(id, false);
+    if (id) { saveTestCompleted(id, false); clearTestSession(id); }
   };
 
   // ── Config screen ──
@@ -306,24 +364,37 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     const isCorrect = isWritten ? checkWrittenAnswer(written, q.correctAnswer) : answer === q.correctAnswer;
     setCorrect(isCorrect);
     setSubmitted(true);
-    if (isCorrect) setScore(s => s + 1);
-    setAnswers(prev => [...prev, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }]);
+    const newScore = isCorrect ? score + 1 : score;
+    if (isCorrect) setScore(newScore);
+    const newAnswers = [...answers, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }];
+    setAnswers(newAnswers);
     await onUpdateStat(q.cardId, isCorrect);
     // 진행도 저장 (홈 진행도 표시용)
-    if (id) saveTestProgress(id, qIdx + 1, questions.length);
+    if (id) {
+      saveTestProgress(id, qIdx + 1, questions.length);
+      // 세션 저장 (이어하기용) — 제출 후 현재 문제 인덱스까지 저장
+      saveTestSession(id, { questions, qIdx, score: newScore, answers: newAnswers });
+    }
   };
 
   const next = () => {
     if (qIdx + 1 >= questions.length) {
       setScreen('result');
-      if (id) { saveTestProgress(id, questions.length, questions.length); saveTestCompleted(id, true); }
+      if (id) {
+        saveTestProgress(id, questions.length, questions.length);
+        saveTestCompleted(id, true);
+        clearTestSession(id); // 완료 시 세션 삭제
+      }
       return;
     }
-    setQIdx(i => i + 1);
+    const nextIdx = qIdx + 1;
+    setQIdx(nextIdx);
     setSelected(null);
     setWritten('');
     setSubmitted(false);
     setCorrect(false);
+    // 다음 문제로 이동 시 세션 업데이트
+    if (id) saveTestSession(id, { questions, qIdx: nextIdx, score, answers });
   };
 
   return (
