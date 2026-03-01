@@ -15,6 +15,34 @@ interface ReviewCard extends Card {
   setId: string;
 }
 
+// 오늘 날짜 키 (YYYY-MM-DD)
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+interface ReviewResult {
+  date: string;
+  done: number;
+  correct: number;
+}
+
+function saveReviewResult(result: ReviewResult) {
+  try { localStorage.setItem('qf-review-result', JSON.stringify(result)); } catch {}
+}
+
+function loadReviewResult(): ReviewResult | null {
+  try {
+    const v = localStorage.getItem('qf-review-result');
+    if (!v) return null;
+    const r: ReviewResult = JSON.parse(v);
+    return r.date === todayKey() ? r : null; // 오늘 날짜 것만 유효
+  } catch { return null; }
+}
+
+function clearReviewResult() {
+  try { localStorage.removeItem('qf-review-result'); } catch {}
+}
+
 export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) {
   const navigate = useNavigate();
   const now = Date.now();
@@ -31,11 +59,54 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
       .map(card => ({ ...card, setTitle: set.title, setId: set.id }))
   );
 
+  // 오늘 이미 완료한 결과가 있으면 바로 완료 화면으로
+  const savedResult = loadReviewResult();
+
   const [queue, setQueue] = useState<ReviewCard[]>(() => [...dueCards]);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
   const [correct, setCorrect] = useState(0);
+  // 완료 화면 표시 여부 (저장된 결과 복원 or 세션 완료 시)
+  const [completedResult, setCompletedResult] = useState<{ done: number; correct: number } | null>(
+    savedResult ? { done: savedResult.done, correct: savedResult.correct } : null
+  );
+
+  // 오늘 완료 결과 표시
+  if (completedResult) {
+    const pct = completedResult.done > 0 ? Math.round((completedResult.correct / completedResult.done) * 100) : 0;
+    const handleRetry = () => {
+      clearReviewResult();
+      setQueue([...dueCards]);
+      setIdx(0);
+      setDone(0);
+      setCorrect(0);
+      setFlipped(false);
+      setCompletedResult(null);
+    };
+    return (
+      <div style={{ maxWidth: 480, margin: '80px auto', textAlign: 'center' }}>
+        <div style={{ width: 80, height: 80, background: pct >= 70 ? 'var(--green-bg)' : 'var(--blue-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <Brain size={36} color={pct >= 70 ? 'var(--green)' : 'var(--blue)'} />
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>오늘 복습 완료!</h2>
+        <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 6 }}>
+          {completedResult.done}장 중 {completedResult.correct}장 정답 ({pct}%)
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 28 }}>
+          내일 새로운 복습 카드가 준비됩니다.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          {dueCards.length > 0 && (
+            <button className="btn btn-secondary btn-md" onClick={handleRetry}>
+              <RotateCcw size={15} /> 다시 복습하기
+            </button>
+          )}
+          <button className="btn btn-primary btn-md" onClick={() => navigate('/')}>홈으로</button>
+        </div>
+      </div>
+    );
+  }
 
   if (dueCards.length === 0) {
     return (
@@ -52,26 +123,12 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
     );
   }
 
-  // 세션 완료
+  // 세션 진행 중 완료 체크
   if (done >= queue.length && done > 0) {
-    const pct = Math.round((correct / done) * 100);
-    return (
-      <div style={{ maxWidth: 480, margin: '80px auto', textAlign: 'center' }}>
-        <div style={{ width: 80, height: 80, background: pct >= 70 ? 'var(--green-bg)' : 'var(--blue-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <Brain size={36} color={pct >= 70 ? 'var(--green)' : 'var(--blue)'} />
-        </div>
-        <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>복습 완료!</h2>
-        <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 24 }}>
-          {done}장 중 {correct}장 정답 ({pct}%)
-        </p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button className="btn btn-secondary btn-md" onClick={() => { setQueue([...dueCards]); setIdx(0); setDone(0); setCorrect(0); setFlipped(false); }}>
-            <RotateCcw size={15} /> 다시
-          </button>
-          <button className="btn btn-primary btn-md" onClick={() => navigate('/')}>홈으로</button>
-        </div>
-      </div>
-    );
+    // 이미 completedResult가 없으면 저장하고 표시 (이 분기는 거의 도달 안 하지만 안전망)
+    const result = { done, correct };
+    saveReviewResult({ date: todayKey(), ...result });
+    // completedResult state를 set하면 re-render → 위의 completedResult 분기에서 처리
   }
 
   const card = queue[idx];
@@ -79,10 +136,19 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
 
   const rate = async (isCorrect: boolean) => {
     await onUpdateStat(card.id, isCorrect);
-    setDone(d => d + 1);
-    if (isCorrect) setCorrect(c => c + 1);
+    const newDone = done + 1;
+    const newCorrect = isCorrect ? correct + 1 : correct;
+    setDone(newDone);
+    if (isCorrect) setCorrect(newCorrect);
     setIdx(i => i + 1);
     setFlipped(false);
+
+    // 마지막 카드였으면 결과 저장 후 완료 화면으로
+    if (newDone >= queue.length) {
+      const result = { done: newDone, correct: newCorrect };
+      saveReviewResult({ date: todayKey(), ...result });
+      setCompletedResult(result);
+    }
   };
 
   const pct = Math.round((idx / queue.length) * 100);

@@ -54,9 +54,17 @@ export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCo
 
   const streak = loadStreak();
 
-  // 오늘 복습 대상 카드 수
+  // 오늘 복습 대상 카드 수 (오늘 이미 완료했으면 0)
   const now = Date.now();
-  const dueCount = cardSets.reduce((total, set) =>
+  const todayReviewDone = (() => {
+    try {
+      const v = localStorage.getItem('qf-review-result');
+      if (!v) return false;
+      const r = JSON.parse(v);
+      return r.date === new Date().toISOString().slice(0, 10);
+    } catch { return false; }
+  })();
+  const dueCount = todayReviewDone ? 0 : cardSets.reduce((total, set) =>
     total + set.cards.filter(card => {
       const stat = set.studyStats?.cardStats?.[card.id];
       if (!stat?.nextReview) return false;
