@@ -13,10 +13,12 @@ export async function upsertSession(
   progress: Record<string, unknown>,
   completed: boolean,
 ): Promise<void> {
-  await supabase.from('study_sessions').upsert(
-    { user_id: userId, set_id: setId, mode, progress, completed },
-    { onConflict: 'user_id,set_id,mode' },
-  );
+  try {
+    await supabase.from('study_sessions').upsert(
+      { user_id: userId, set_id: setId, mode, progress, completed },
+      { onConflict: 'user_id,set_id,mode' },
+    );
+  } catch {}
 }
 
 export async function loadSession(
@@ -24,15 +26,17 @@ export async function loadSession(
   setId: string,
   mode: string,
 ): Promise<{ progress: Record<string, unknown>; completed: boolean } | null> {
-  const { data } = await supabase
-    .from('study_sessions')
-    .select('progress, completed')
-    .eq('user_id', userId)
-    .eq('set_id', setId)
-    .eq('mode', mode)
-    .maybeSingle();
-  if (!data) return null;
-  return { progress: (data.progress as Record<string, unknown>) ?? {}, completed: data.completed };
+  try {
+    const { data, error } = await supabase
+      .from('study_sessions')
+      .select('progress, completed')
+      .eq('user_id', userId)
+      .eq('set_id', setId)
+      .eq('mode', mode)
+      .maybeSingle();
+    if (error || !data) return null;
+    return { progress: (data.progress as Record<string, unknown>) ?? {}, completed: data.completed };
+  } catch { return null; }
 }
 
 export async function deleteSession(
@@ -40,22 +44,25 @@ export async function deleteSession(
   setId: string,
   mode: string,
 ): Promise<void> {
-  await supabase
-    .from('study_sessions')
-    .delete()
-    .eq('user_id', userId)
-    .eq('set_id', setId)
-    .eq('mode', mode);
+  try {
+    await supabase
+      .from('study_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('set_id', setId)
+      .eq('mode', mode);
+  } catch {}
 }
 
 /** 세트의 모든 모드 완료 여부 & 진행도를 한 번에 조회 */
 export async function loadAllSessions(
   userId: string,
 ): Promise<Array<{ set_id: string; mode: string; progress: Record<string, unknown>; completed: boolean; updated_at: string }>> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('study_sessions')
     .select('set_id, mode, progress, completed, updated_at')
     .eq('user_id', userId);
+  if (error) return [];
   return (data ?? []) as Array<{ set_id: string; mode: string; progress: Record<string, unknown>; completed: boolean; updated_at: string }>;
 }
 
