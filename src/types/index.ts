@@ -58,16 +58,6 @@ export interface TestQuestion {
   isCorrect?: boolean;
 }
 
-export interface TestSession {
-  id: string;
-  setId: string;
-  questions: TestQuestion[];
-  startedAt: number;
-  completedAt?: number;
-  score?: number;
-  totalQuestions: number;
-}
-
 export interface MatchItem {
   id: string;
   text: string;

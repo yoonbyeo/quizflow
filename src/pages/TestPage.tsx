@@ -7,7 +7,6 @@ import type { CardSet, TestQuestion, TestConfig } from '../types';
 interface TestPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
-  userId?: string;
 }
 
 const DEFAULT_CONFIG: TestConfig = {
