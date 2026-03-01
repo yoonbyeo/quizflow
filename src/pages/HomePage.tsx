@@ -401,7 +401,6 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
             <div key={label} className="mode-btn" onClick={() => {
               if (mode === null) { navigate('/create'); return; }
               if (cardSets.length === 0) { navigate('/library'); return; }
-              if (cardSets.length === 1) { navigate(MODE_META[mode].path(cardSets[0].id)); return; }
               setPendingMode(mode);
             }} style={{ cursor: 'pointer', padding: 16 }}>
               <div className="mode-icon" style={{ background: bg, width: 36, height: 36, borderRadius: 10 }}>
