@@ -218,7 +218,7 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
       const lastMode = getLastMode(s.id);
-      if (lastMode === 'match' || lastMode === 'flashcard') return false;
+      if (lastMode === 'match' || lastMode === 'flashcard' || lastMode === 'test') return false;
       return !isCompleted(s.id, lastMode);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
