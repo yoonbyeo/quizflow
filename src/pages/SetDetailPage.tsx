@@ -36,13 +36,13 @@ function InlineFlashcard({ set }: { set: CardSet }) {
         </div>
       </div>
 
-      <div className="flip-card" style={{ minHeight: 260, cursor: 'pointer', marginBottom: 16 }}
+      <div className="flip-card" style={{ height: card.imageUrl ? 340 : 260, cursor: 'pointer', marginBottom: 16 }}
         onClick={() => setFlipped(f => !f)}>
-        <div className={`flip-inner ${flipped ? 'flipped' : ''}`} style={{ minHeight: 260 }}>
+        <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
           <div className="flip-front">
             <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>{frontLabel}</div>
             {card.imageUrl && !flipped && (
-              <ImageZoom src={card.imageUrl} style={{ width: '60%', maxWidth: '60%', borderRadius: 10, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)', display: 'block' }} />
+              <ImageZoom src={card.imageUrl} style={{ maxHeight: 160, maxWidth: '90%', borderRadius: 10, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
             )}
             <p style={{ fontSize: card.imageUrl ? 20 : 24, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
             {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 10 }}>힌트: {card.hint}</p>}

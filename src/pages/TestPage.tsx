@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
+import { saveLastMode } from './FlashcardPage';
 import { upsertSession, loadSession } from '../hooks/useStudySync';
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
@@ -72,6 +73,9 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
   const set = cardSets.find(s => s.id === id);
   const resume = searchParams.get('resume') === '1';
 
+  useEffect(() => {
+    if (id) saveLastMode(id, 'test');
+  }, [id]);
 
   const [config, setConfig] = useState<TestConfig>(() => {
     if (id) { const saved = loadTestConfig(id); if (saved) return saved; }

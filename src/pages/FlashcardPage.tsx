@@ -221,14 +221,14 @@ export default function FlashcardPage({ cardSets, onUpdateStat, userId }: Flashc
         </div>
       </div>
 
-      <div className="flip-card" style={{ minHeight: 340, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
-        <div className={`flip-inner ${flipped ? 'flipped' : ''}`} style={{ minHeight: 340 }}>
+      <div className="flip-card" style={{ height: card.imageUrl ? 420 : 340, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
+        <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
           <div className="flip-front">
             <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>
               {answerWith === 'definition' ? '용어' : '정의'}
             </div>
             {card.imageUrl && !flipped && (
-              <ImageZoom src={card.imageUrl} style={{ width: '60%', maxWidth: '60%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)', display: 'block' }} />
+              <ImageZoom src={card.imageUrl} style={{ maxHeight: 200, maxWidth: '85%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
             )}
             <p style={{ fontSize: card.imageUrl ? 20 : 26, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
             {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>힌트: {card.hint}</p>}
