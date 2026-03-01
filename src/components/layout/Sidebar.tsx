@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight, Flame, RefreshCw } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight, Flame, RefreshCw, User as UserIcon, Settings, Sun, Moon, Shield, HelpCircle } from 'lucide-react';
 import { signOut } from '../../hooks/useAuth';
 import { loadStreak } from '../../utils/streak';
 import type { User } from '@supabase/supabase-js';
@@ -18,9 +19,33 @@ interface SidebarProps {
 export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCollapse, mobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   const handleSignOut = async () => { await signOut(); navigate('/login'); };
   const isActive = (to: string) => to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // 테마 감지
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    setProfileMenuOpen(false);
+  };
 
   const wrongCardCount = cardSets.reduce((total, set) => {
     const stats = set.studyStats?.cardStats ?? {};
@@ -169,40 +194,125 @@ export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCo
         </div>
       )}
 
-      {/* 프로필 */}
+      {/* 프로필 + 드롭다운 */}
       {user && (
-        <div style={{ padding: collapsed ? '10px 6px' : '12px 8px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+        <div ref={profileRef} style={{ padding: collapsed ? '10px 6px' : '10px 8px', borderTop: '1px solid var(--border)', flexShrink: 0, position: 'relative' }}>
+
+          {/* 드롭다운 메뉴 (프로필 영역 위로 뜸) */}
+          {profileMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: collapsed ? 56 : 8,
+              right: collapsed ? 'auto' : 8,
+              width: collapsed ? 220 : 'auto',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              boxShadow: '0 -4px 24px rgba(0,0,0,.25)',
+              zIndex: 100,
+              overflow: 'hidden',
+              marginBottom: 6,
+            }}>
+              {/* 사용자 정보 헤더 */}
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                {user.user_metadata?.avatar_url
+                  ? <img src={user.user_metadata.avatar_url} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  : <div className="avatar" style={{ width: 36, height: 36, fontSize: 15 }}>{(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}</div>
+                }
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.user_metadata?.full_name || user.email?.split('@')[0]}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.email}
+                  </div>
+                </div>
+              </div>
+
+              {/* 메뉴 항목들 */}
+              {[
+                { icon: UserIcon, label: '프로필', action: () => { navigate('/profile'); setProfileMenuOpen(false); if (isMobile) onMobileClose?.(); } },
+                { icon: Settings, label: '설정', action: () => { navigate('/profile'); setProfileMenuOpen(false); if (isMobile) onMobileClose?.(); } },
+              ].map(({ icon: Icon, label, action }) => (
+                <button key={label} onClick={action}
+                  style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', color: 'var(--text-1)', fontSize: 13, fontWeight: 500, transition: 'background .12s', textAlign: 'left' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  <Icon size={15} color="var(--text-2)" />
+                  {label}
+                </button>
+              ))}
+
+              {/* 테마 토글 */}
+              <button onClick={toggleTheme}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', color: 'var(--text-1)', fontSize: 13, fontWeight: 500, transition: 'background .12s', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                {isDark ? <Sun size={15} color="var(--text-2)" /> : <Moon size={15} color="var(--text-2)" />}
+                {isDark ? '라이트 모드' : '다크 모드'}
+              </button>
+
+              <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+
+              <button onClick={() => { navigate('/privacy'); setProfileMenuOpen(false); if (isMobile) onMobileClose?.(); }}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', color: 'var(--text-1)', fontSize: 13, fontWeight: 500, transition: 'background .12s', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <Shield size={15} color="var(--text-2)" />
+                개인정보 취급방침
+              </button>
+
+              <button onClick={() => { navigate('/help'); setProfileMenuOpen(false); if (isMobile) onMobileClose?.(); }}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', color: 'var(--text-1)', fontSize: 13, fontWeight: 500, transition: 'background .12s', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <HelpCircle size={15} color="var(--text-2)" />
+                도움말 및 피드백
+              </button>
+
+              <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+
+              <button onClick={() => { handleSignOut(); setProfileMenuOpen(false); }}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', color: 'var(--red)', fontSize: 13, fontWeight: 500, transition: 'background .12s', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <LogOut size={15} color="var(--red)" />
+                로그아웃
+              </button>
+            </div>
+          )}
+
+          {/* 프로필 트리거 버튼 */}
           {collapsed ? (
-            <Link to="/profile" onClick={isMobile ? onMobileClose : undefined}
+            <button
+              onClick={() => setProfileMenuOpen(o => !o)}
               title={user.user_metadata?.full_name || user.email?.split('@')[0]}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: 8, textDecoration: 'none', transition: 'background .15s' }}
+              style={{ width: '100%', background: profileMenuOpen ? 'var(--bg-2)' : 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: 8, transition: 'background .15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              onMouseLeave={e => { if (!profileMenuOpen) e.currentTarget.style.background = 'none'; }}>
               {user.user_metadata?.avatar_url
                 ? <img src={user.user_metadata.avatar_url} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                 : <div className="avatar">{(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}</div>
               }
-            </Link>
+            </button>
           ) : (
-            <Link to="/profile" onClick={isMobile ? onMobileClose : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 8, textDecoration: 'none', transition: 'background .15s' }}
+            <button
+              onClick={() => setProfileMenuOpen(o => !o)}
+              style={{ width: '100%', background: profileMenuOpen ? 'var(--bg-2)' : 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 8, transition: 'background .15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              onMouseLeave={e => { if (!profileMenuOpen) e.currentTarget.style.background = 'none'; }}>
               {user.user_metadata?.avatar_url
                 ? <img src={user.user_metadata.avatar_url} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                 : <div className="avatar">{(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}</div>
               }
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {user.user_metadata?.full_name || user.email?.split('@')[0]}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>프로필 편집</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>계정 관리</div>
               </div>
-              <button onClick={e => { e.preventDefault(); handleSignOut(); }} title="로그아웃"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, borderRadius: 6, display: 'flex', flexShrink: 0 }}>
-                <LogOut size={15} />
-              </button>
-            </Link>
+            </button>
           )}
         </div>
       )}

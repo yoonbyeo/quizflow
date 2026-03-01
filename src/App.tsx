@@ -18,6 +18,8 @@ import StatsPage from './pages/StatsPage';
 import WrongNotePage from './pages/WrongNotePage';
 import ProfilePage from './pages/ProfilePage';
 import ReviewPage from './pages/ReviewPage';
+import PrivacyPage from './pages/PrivacyPage';
+import HelpPage from './pages/HelpPage';
 
 function Spinner() {
   return (
@@ -70,6 +72,8 @@ function AppContent() {
                 <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} />} />
                 <Route path="/review" element={<ReviewPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/profile" element={<ProfilePage user={user} />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/help" element={<HelpPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
