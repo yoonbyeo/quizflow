@@ -253,7 +253,10 @@ export function useCardSets(userId: string | undefined) {
     const prev = existing.data;
     const newStreak = isCorrect ? (prev?.streak ?? 0) + 1 : 0;
     const newCorrect = (prev?.correct ?? 0) + (isCorrect ? 1 : 0);
-    const newIncorrect = (prev?.incorrect ?? 0) + (isCorrect ? 0 : 1);
+    const rawIncorrect = (prev?.incorrect ?? 0) + (isCorrect ? 0 : 1);
+    // 연속 3번 이상 정답이면 오답 기록 초기화 → 오답노트에서 자동 제거
+    const finalIncorrect = newStreak >= 3 ? 0 : rawIncorrect;
+    const newIncorrect = finalIncorrect;
     const difficulty = newStreak >= 5 ? 'easy' : newStreak >= 2 ? 'medium' : newIncorrect > newCorrect ? 'hard' : 'unrated';
 
     // SM-2 간략화: 정답이면 인터벌 증가, 오답이면 1일로 리셋

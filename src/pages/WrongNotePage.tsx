@@ -59,6 +59,7 @@ export default function WrongNotePage({ cardSets, onUpdateStat }: WrongNotePageP
   const [quizScore, setQuizScore] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
+  const [masteredCount, setMasteredCount] = useState(0);
 
   // ── 오답 카드 수집 ──
   const allWrongCards: WrongCard[] = [];
@@ -133,6 +134,7 @@ export default function WrongNotePage({ cardSets, onUpdateStat }: WrongNotePageP
     setQuizScore(0);
     setQuizAnswers([]);
     setShowReview(false);
+    setMasteredCount(0);
     setStudyMode('quiz');
   }, [sorted]);
 
@@ -155,8 +157,20 @@ export default function WrongNotePage({ cardSets, onUpdateStat }: WrongNotePageP
     const newScore = isCorrect ? sc + 1 : sc;
     if (isCorrect) setQuizScore(newScore);
     setQuizAnswers([...ans, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }]);
+
+    if (isCorrect) {
+      // 이 카드의 현재 streak을 확인해서 정답 후 streak >= 3이 되면 마스터 카운트 증가
+      const wc = studyCards.find(c => c.cardId === q.cardId);
+      if (wc) {
+        const newStreak = wc.streak + 1;
+        if (newStreak >= 3) {
+          setMasteredCount(prev => prev + 1);
+        }
+      }
+    }
+
     await onUpdateStat(q.cardId, isCorrect);
-  }, [onUpdateStat]);
+  }, [onUpdateStat, studyCards]);
 
   const nextQuiz = useCallback(() => {
     const { quizQuestions: qs, quizIdx: qi } = stateRef.current;
@@ -283,6 +297,14 @@ export default function WrongNotePage({ cardSets, onUpdateStat }: WrongNotePageP
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>오답 테스트 완료!</h2>
           <p style={{ color: 'var(--text-2)' }}>{quizQuestions.length}문제 중 {quizScore}개 정답</p>
+          {masteredCount > 0 && (
+            <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--green-bg)', border: '1px solid rgba(63,185,80,.3)', borderRadius: 99, padding: '6px 16px' }}>
+              <CheckCircle size={14} color="var(--green)" />
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>
+                {masteredCount}개 카드가 오답노트에서 제거됐어요!
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>

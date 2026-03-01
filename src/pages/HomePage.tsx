@@ -212,11 +212,12 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
   };
 
   // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
+  // 플래시카드와 매칭은 이어하기에서 제외 (단순 열람 모드)
   const inProgress = [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
       const lastMode = getLastMode(s.id);
-      if (lastMode === 'match') return false;
+      if (lastMode === 'match' || lastMode === 'flashcard') return false;
       return !isCompleted(s.id, lastMode);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
