@@ -55,7 +55,6 @@ export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
   }
 
   const card = cards[idx];
-  const pct = Math.round((idx / cards.length) * 100);
 
   const submit = async () => {
     const isCorrect = checkWrittenAnswer(input, card.definition);
@@ -67,39 +66,31 @@ export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
 
   const next = () => {
     if (idx + 1 >= cards.length) { setFinished(true); return; }
-    setIdx(i => i + 1);
-    setInput('');
-    setSubmitted(false);
+    setIdx(i => i + 1); setInput(''); setSubmitted(false);
   };
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> {set.title}
         </button>
         <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{idx + 1} / {cards.length}</span>
       </div>
 
       <div className="progress-track" style={{ marginBottom: 24 }}>
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+        <div className="progress-fill" style={{ width: `${(idx / cards.length) * 100}%` }} />
       </div>
 
       <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
         <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>용어</p>
-        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 24, lineHeight: 1.4 }}>{card.term}</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16, lineHeight: 1.4 }}>{card.term}</h2>
+        {card.imageUrl && <img src={card.imageUrl} style={{ maxHeight: 120, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
         {card.hint && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>힌트: {card.hint}</p>}
 
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>정의를 입력하세요:</p>
-        <textarea
-          className="input"
-          rows={3}
-          placeholder="여기에 정의를 입력..."
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          disabled={submitted}
-          autoFocus
-        />
+        <textarea className="input" rows={3} placeholder="여기에 정의를 입력..." value={input}
+          onChange={e => setInput(e.target.value)} disabled={submitted} autoFocus />
 
         {submitted && (
           <div className={`alert ${correct ? 'alert-success' : 'alert-error'}`} style={{ marginTop: 12 }}>
@@ -112,13 +103,10 @@ export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
         )}
       </div>
 
-      {!submitted ? (
-        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submit} disabled={!input.trim()}>제출</button>
-      ) : (
-        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={next}>
-          {idx + 1 >= cards.length ? '결과 보기' : '다음'} →
-        </button>
-      )}
+      {!submitted
+        ? <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={submit} disabled={!input.trim()}>제출</button>
+        : <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={next}>{idx + 1 >= cards.length ? '결과 보기' : '다음'} →</button>
+      }
     </div>
   );
 }

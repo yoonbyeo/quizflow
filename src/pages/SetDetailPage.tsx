@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft } from 'lucide-react';
+import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain } from 'lucide-react';
 import type { CardSet, CardStat } from '../types';
 
 interface SetDetailPageProps {
@@ -30,14 +30,14 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
 
   const modes = [
     { label: '플래시카드', icon: Zap, color: 'var(--blue)', bg: 'var(--blue-bg)', path: `/flashcard/${id}`, desc: '카드를 넘기며 암기' },
-    { label: '테스트', icon: PenLine, color: 'var(--purple)', bg: 'var(--purple-bg)', path: `/test/${id}`, desc: '객관식 · 주관식' },
-    { label: '매칭', icon: Shuffle, color: 'var(--green)', bg: 'var(--green-bg)', path: `/match/${id}`, desc: '짝 맞추기 게임' },
-    { label: '쓰기', icon: BookText, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/write/${id}`, desc: '직접 입력하며 학습' },
+    { label: '학습하기', icon: Brain, color: 'var(--purple)', bg: 'var(--purple-bg)', path: `/learn/${id}`, desc: 'AI 적응형 학습' },
+    { label: '테스트', icon: PenLine, color: 'var(--green)', bg: 'var(--green-bg)', path: `/test/${id}`, desc: '객관식 · 주관식 · OX' },
+    { label: '매칭', icon: Shuffle, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/match/${id}`, desc: '짝 맞추기 게임' },
+    { label: '쓰기', icon: BookText, color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: `/write/${id}`, desc: '직접 입력하며 학습' },
   ];
 
   return (
     <div>
-      {/* Back */}
       <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 20, gap: 4 }}>
         <ChevronLeft size={15} /> 뒤로
       </button>
@@ -55,7 +55,6 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
           </Link>
         </div>
 
-        {/* Progress */}
         {total > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -68,7 +67,6 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
           </div>
         )}
 
-        {/* Mini stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 20 }}>
           {[
             { label: '총 카드', value: total, color: 'var(--text-1)' },
@@ -85,8 +83,8 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       </div>
 
       {/* Study modes */}
-      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>학습 모드</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 28 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>학습 모드 선택</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 28 }}>
         {modes.map(({ label, icon: Icon, color, bg, path, desc }) => (
           <Link key={label} to={path} className="mode-btn">
             <div className="mode-icon" style={{ background: bg }}>
@@ -104,7 +102,8 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700 }}>카드 목록 ({total})</h2>
         {stats.length > 0 && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm('통계를 초기화할까요?')) onResetStats(id!); }} style={{ color: 'var(--red)', gap: 4 }}>
+          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', gap: 4 }}
+            onClick={() => { if (confirm('통계를 초기화할까요?')) onResetStats(id!); }}>
             <RotateCcw size={13} /> 통계 초기화
           </button>
         )}
@@ -122,6 +121,7 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>용어</div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{card.term}</div>
+                  {card.imageUrl && <img src={card.imageUrl} style={{ marginTop: 8, maxWidth: 120, borderRadius: 6, border: '1px solid var(--border)' }} />}
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>정의</div>

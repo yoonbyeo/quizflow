@@ -3,6 +3,7 @@ export interface Card {
   term: string;
   definition: string;
   hint?: string;
+  imageUrl?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -12,10 +13,19 @@ export interface CardSet {
   title: string;
   description?: string;
   category?: string;
+  folderId?: string;
   cards: Card[];
   createdAt: number;
   updatedAt: number;
   studyStats: StudyStats;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  createdAt: number;
 }
 
 export interface StudyStats {
@@ -33,7 +43,7 @@ export interface CardStat {
   difficulty: 'easy' | 'medium' | 'hard' | 'unrated';
 }
 
-export type StudyMode = 'flashcard' | 'test' | 'match' | 'write';
+export type StudyMode = 'flashcard' | 'test' | 'match' | 'write' | 'learn';
 
 export interface TestQuestion {
   id: string;
@@ -66,3 +76,11 @@ export interface MatchItem {
 }
 
 export type SortOrder = 'created' | 'updated' | 'alphabetical' | 'size';
+
+export interface TestConfig {
+  questionCount: number;
+  answerWith: 'definition' | 'term' | 'both';
+  includeMultipleChoice: boolean;
+  includeWritten: boolean;
+  includeTrueFalse: boolean;
+}

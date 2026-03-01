@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Trophy, RotateCcw, Timer } from 'lucide-react';
 import { shuffleArray } from '../utils';
@@ -24,7 +24,7 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
 
   const initItems = useMemo<MatchItem[]>(() => {
     if (!set) return [];
-    const cards = set.cards.slice(0, 8);
+    const cards = shuffleArray([...set.cards]).slice(0, 6);
     const terms: MatchItem[] = cards.map(c => ({ id: `t-${c.id}`, cardId: c.id, text: c.term, type: 'term', matched: false }));
     const defs: MatchItem[] = cards.map(c => ({ id: `d-${c.id}`, cardId: c.id, text: c.definition, type: 'definition', matched: false }));
     return shuffleArray([...terms, ...defs]);
@@ -34,17 +34,21 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [wrong, setWrong] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
-  const [startTime] = useState(Date.now());
   const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(true);
+  const [mistakes, setMistakes] = useState(0);
+
+  useEffect(() => {
+    if (!running || finished) return;
+    const t = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [running, finished]);
 
   const handleSelect = async (itemId: string) => {
     const item = items.find(i => i.id === itemId);
-    if (!item || item.matched) return;
+    if (!item || item.matched || wrong.length > 0) return;
 
-    if (!selected) {
-      setSelected(itemId);
-      return;
-    }
+    if (!selected) { setSelected(itemId); return; }
     if (selected === itemId) { setSelected(null); return; }
 
     const prev = items.find(i => i.id === selected)!;
@@ -53,22 +57,20 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
       setItems(next);
       setSelected(null);
       await onUpdateStat(item.cardId, true);
-      if (next.every(i => i.matched)) {
-        setElapsed(Date.now() - startTime);
-        setFinished(true);
-      }
+      if (next.every(i => i.matched)) { setFinished(true); setRunning(false); }
     } else {
+      setMistakes(m => m + 1);
       setWrong([selected, itemId]);
       await onUpdateStat(item.cardId, false);
-      setTimeout(() => { setWrong([]); setSelected(null); }, 800);
+      setTimeout(() => { setWrong([]); setSelected(null); }, 900);
     }
   };
 
   const restart = () => {
-    setItems(shuffleArray(initItems.map(i => ({ ...i, matched: false }))));
-    setSelected(null);
-    setWrong([]);
-    setFinished(false);
+    const reset = initItems.map(i => ({ ...i, matched: false }));
+    setItems(shuffleArray(reset));
+    setSelected(null); setWrong([]); setFinished(false);
+    setElapsed(0); setRunning(true); setMistakes(0);
   };
 
   if (!set || set.cards.length < 2) {
@@ -81,7 +83,6 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
   }
 
   if (finished) {
-    const sec = Math.round(elapsed / 1000);
     return (
       <div style={{ maxWidth: 400, margin: '60px auto', textAlign: 'center' }}>
         <div style={{ width: 80, height: 80, background: 'var(--green-bg)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
@@ -89,11 +90,17 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
         </div>
         <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>완료!</h2>
         <p style={{ color: 'var(--text-2)', marginBottom: 20 }}>모든 카드를 매칭했습니다</p>
-        <div className="stat-card" style={{ marginBottom: 24 }}>
-          <div className="stat-value" style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <Timer size={24} /> {sec}초
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 22 }}>
+              <Timer size={20} /> {elapsed}초
+            </div>
+            <div className="stat-label">완료 시간</div>
           </div>
-          <div className="stat-label">완료 시간</div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: mistakes === 0 ? 'var(--green)' : 'var(--yellow)', fontSize: 22 }}>{mistakes}</div>
+            <div className="stat-label">실수</div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <button className="btn btn-secondary btn-md" onClick={restart}><RotateCcw size={15} /> 다시</button>
@@ -105,31 +112,38 @@ export default function MatchPage({ cardSets, onUpdateStat }: MatchPageProps) {
 
   const matched = items.filter(i => i.matched).length / 2;
   const total = items.length / 2;
+  const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ maxWidth: 760, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> {set.title}
         </button>
-        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{matched} / {total} 매칭</span>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Timer size={13} /> {formatTime(elapsed)}
+          </span>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{matched} / {total} 매칭</span>
+        </div>
       </div>
 
       <div className="progress-track" style={{ marginBottom: 24 }}>
         <div className="progress-fill" style={{ width: `${(matched / total) * 100}%` }} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
         {items.map(item => (
-          <button
-            key={item.id}
-            onClick={() => handleSelect(item.id)}
-            className={`match-btn ${item.matched ? 'matched' : wrong.includes(item.id) ? 'wrong' : selected === item.id ? 'selected' : ''}`}
-          >
+          <button key={item.id} onClick={() => handleSelect(item.id)}
+            className={`match-btn ${item.matched ? 'matched' : wrong.includes(item.id) ? 'wrong' : selected === item.id ? 'selected' : ''}`}>
             {item.text}
           </button>
         ))}
       </div>
+
+      {mistakes > 0 && (
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--text-3)' }}>실수 {mistakes}번</p>
+      )}
     </div>
   );
 }

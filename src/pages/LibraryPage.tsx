@@ -5,6 +5,7 @@ import type { CardSet } from '../types';
 
 interface LibraryPageProps {
   cardSets: CardSet[];
+  folders: import('../types').Folder[];
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
 }

@@ -4,6 +4,7 @@ import type { CardSet, CardStat } from '../types';
 
 interface HomePageProps {
   cardSets: CardSet[];
+  folders: import('../types').Folder[];
   loading: boolean;
 }
 
@@ -48,6 +49,7 @@ function SetCard({ set, onClick }: { set: CardSet; onClick: () => void }) {
 }
 
 export default function HomePage({ cardSets, loading }: HomePageProps) {
+  // folders prop accepted but not used directly on this page
   const navigate = useNavigate();
   const recent = [...cardSets].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
 

@@ -1,14 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ChevronLeft, Zap } from 'lucide-react';
+import type { Folder } from '../types';
 
 interface CreateSetPageProps {
-  onCreate: (
-    title: string,
-    description?: string,
-    category?: string,
-    cards?: { term: string; definition: string; hint?: string }[]
-  ) => Promise<unknown>;
+  onCreate: (title: string, description?: string, category?: string, cards?: { term: string; definition: string; hint?: string }[], folderId?: string) => Promise<unknown>;
+  folders: Folder[];
 }
 
 interface DraftCard {
@@ -17,11 +14,12 @@ interface DraftCard {
   hint: string;
 }
 
-export default function CreateSetPage({ onCreate }: CreateSetPageProps) {
+export default function CreateSetPage({ onCreate, folders }: CreateSetPageProps) {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
+  const [folderId, setFolderId] = useState('');
   const [cards, setCards] = useState<DraftCard[]>([
     { term: '', definition: '', hint: '' },
     { term: '', definition: '', hint: '' },
@@ -41,7 +39,7 @@ export default function CreateSetPage({ onCreate }: CreateSetPageProps) {
     if (validCards.length === 0) { setError('카드를 최소 1개 이상 추가하세요.'); return; }
     setLoading(true); setError('');
     try {
-      const result = await onCreate(title.trim(), description.trim() || undefined, category.trim() || undefined, validCards);
+      const result = await onCreate(title.trim(), description.trim() || undefined, category.trim() || undefined, validCards, folderId || undefined);
       if (result && (result as { id?: string }).id) {
         navigate(`/set/${(result as { id: string }).id}`);
       } else {
@@ -64,36 +62,44 @@ export default function CreateSetPage({ onCreate }: CreateSetPageProps) {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Set info */}
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>제목 *</label>
               <input type="text" className="input" placeholder="예: 영어 단어 - Chapter 1" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>카테고리</label>
-                <input type="text" className="input" placeholder="예: 영어, 역사, 과학..." value={category} onChange={e => setCategory(e.target.value)} />
+                <input type="text" className="input" placeholder="예: 영어, 역사..." value={category} onChange={e => setCategory(e.target.value)} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>설명</label>
                 <input type="text" className="input" placeholder="세트 설명 (선택)" value={description} onChange={e => setDescription(e.target.value)} />
               </div>
+              {folders.length > 0 && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>폴더</label>
+                  <select className="input" value={folderId} onChange={e => setFolderId(e.target.value)} style={{ cursor: 'pointer' }}>
+                    <option value="">폴더 없음</option>
+                    {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-        {/* Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
           {cards.map((card, i) => (
             <div key={i} className="card-row">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>카드 {i + 1}</span>
                 {cards.length > 1 && (
-                  <button type="button" onClick={() => removeCard(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4 }}>
+                  <button type="button" onClick={() => removeCard(i)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4 }}>
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -121,9 +127,7 @@ export default function CreateSetPage({ onCreate }: CreateSetPageProps) {
             <Plus size={15} /> 카드 추가
           </button>
           <button type="submit" className="btn btn-primary btn-md" disabled={loading}>
-            {loading ? (
-              <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
-            ) : <Zap size={15} />}
+            {loading ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} /> : <Zap size={15} />}
             세트 저장
           </button>
         </div>

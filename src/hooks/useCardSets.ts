@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import type { CardSet, Card, CardStat } from '../types';
+import type { CardSet, Card, CardStat, Folder } from '../types';
 
 function generateId() {
   return crypto.randomUUID();
@@ -15,6 +15,7 @@ function dbSetToCardSet(dbSet: any, dbCards: any[], dbStats: any[]): CardSet {
       term: c.term,
       definition: c.definition,
       hint: c.hint ?? undefined,
+      imageUrl: c.image_url ?? undefined,
       createdAt: new Date(c.created_at).getTime(),
       updatedAt: new Date(c.created_at).getTime(),
     }));
@@ -43,6 +44,7 @@ function dbSetToCardSet(dbSet: any, dbCards: any[], dbStats: any[]): CardSet {
     title: dbSet.title,
     description: dbSet.description ?? undefined,
     category: dbSet.category ?? undefined,
+    folderId: dbSet.folder_id ?? undefined,
     cards,
     createdAt: new Date(dbSet.created_at).getTime(),
     updatedAt: new Date(dbSet.updated_at).getTime(),
@@ -56,38 +58,50 @@ function dbSetToCardSet(dbSet: any, dbCards: any[], dbStats: any[]): CardSet {
 
 export function useCardSets(userId: string | undefined) {
   const [cardSets, setCardSets] = useState<CardSet[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!userId) { setCardSets([]); setLoading(false); return; }
+    if (!userId) { setCardSets([]); setFolders([]); setLoading(false); return; }
     setLoading(true);
 
-    const [setsRes, cardsRes, statsRes] = await Promise.all([
+    const [setsRes, cardsRes, statsRes, foldersRes] = await Promise.all([
       supabase.from('card_sets').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
       supabase.from('cards').select('*'),
       supabase.from('card_stats').select('*').eq('user_id', userId),
+      supabase.from('folders').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     ]);
 
     const sets = setsRes.data ?? [];
     const cards = cardsRes.data ?? [];
     const stats = statsRes.data ?? [];
+    const foldersData = foldersRes.data ?? [];
 
     setCardSets(sets.map((s) => dbSetToCardSet(s, cards, stats)));
+    setFolders(foldersData.map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      description: f.description ?? undefined,
+      color: f.color ?? '#388bfd',
+      createdAt: new Date(f.created_at).getTime(),
+    })));
     setLoading(false);
   }, [userId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ── Card Sets ──
   const createCardSet = useCallback(async (
     title: string,
     description?: string,
     category?: string,
-    initialCards?: { term: string; definition: string; hint?: string }[]
+    initialCards?: { term: string; definition: string; hint?: string }[],
+    folderId?: string
   ): Promise<CardSet | null> => {
     if (!userId) return null;
     const { data: newSet, error } = await supabase
       .from('card_sets')
-      .insert({ user_id: userId, title, description, category })
+      .insert({ user_id: userId, title, description, category, folder_id: folderId ?? null })
       .select()
       .single();
     if (error || !newSet) return null;
@@ -105,14 +119,19 @@ export function useCardSets(userId: string | undefined) {
     }
 
     await fetchAll();
-    return cardSets.find((s) => s.id === newSet.id) ?? null;
-  }, [userId, fetchAll, cardSets]);
+    return { id: newSet.id } as CardSet;
+  }, [userId, fetchAll]);
 
   const updateCardSet = useCallback(async (
     id: string,
-    updates: { title?: string; description?: string; category?: string }
+    updates: { title?: string; description?: string; category?: string; folderId?: string | null }
   ) => {
-    await supabase.from('card_sets').update(updates).eq('id', id);
+    const dbUpdates: any = { ...updates };
+    if ('folderId' in updates) {
+      dbUpdates.folder_id = updates.folderId;
+      delete dbUpdates.folderId;
+    }
+    await supabase.from('card_sets').update(dbUpdates).eq('id', id);
     await fetchAll();
   }, [fetchAll]);
 
@@ -138,6 +157,7 @@ export function useCardSets(userId: string | undefined) {
     await fetchAll();
   }, [userId, cardSets, fetchAll]);
 
+  // ── Cards ──
   const addCard = useCallback(async (setId: string, term: string, definition: string, hint?: string) => {
     const set = cardSets.find((s) => s.id === setId);
     const position = set?.cards.length ?? 0;
@@ -148,9 +168,14 @@ export function useCardSets(userId: string | undefined) {
   const updateCard = useCallback(async (
     setId: string,
     cardId: string,
-    updates: { term?: string; definition?: string; hint?: string }
+    updates: { term?: string; definition?: string; hint?: string; imageUrl?: string }
   ) => {
-    await supabase.from('cards').update(updates).eq('id', cardId);
+    const dbUpdates: any = { ...updates };
+    if ('imageUrl' in updates) {
+      dbUpdates.image_url = updates.imageUrl;
+      delete dbUpdates.imageUrl;
+    }
+    await supabase.from('cards').update(dbUpdates).eq('id', cardId);
     await supabase.from('card_sets').update({ updated_at: new Date().toISOString() }).eq('id', setId);
     await fetchAll();
   }, [fetchAll]);
@@ -160,26 +185,59 @@ export function useCardSets(userId: string | undefined) {
     await fetchAll();
   }, [fetchAll]);
 
-  const upsertCardStat = useCallback(async (
-    cardId: string,
-    isCorrect: boolean
+  const uploadCardImage = useCallback(async (file: File): Promise<string | null> => {
+    if (!userId) return null;
+    const ext = file.name.split('.').pop();
+    const path = `${userId}/${generateId()}.${ext}`;
+    const { error } = await supabase.storage.from('card-images').upload(path, file);
+    if (error) return null;
+    const { data } = supabase.storage.from('card-images').getPublicUrl(path);
+    return data.publicUrl;
+  }, [userId]);
+
+  const saveCardsForSet = useCallback(async (
+    setId: string,
+    cards: { id?: string; term: string; definition: string; hint?: string; imageUrl?: string; isNew?: boolean }[]
   ) => {
+    const existing = cardSets.find((s) => s.id === setId)?.cards ?? [];
+    const existingIds = new Set(existing.map((c) => c.id));
+
+    const toInsert = cards
+      .filter((c) => c.isNew || !c.id || !existingIds.has(c.id))
+      .filter((c) => c.term.trim() && c.definition.trim())
+      .map((c, i) => ({ set_id: setId, term: c.term, definition: c.definition, hint: c.hint, image_url: c.imageUrl ?? null, position: i }));
+
+    const toUpdate = cards
+      .filter((c) => c.id && existingIds.has(c.id) && !c.isNew)
+      .filter((c) => c.term.trim() && c.definition.trim());
+
+    if (toInsert.length > 0) await supabase.from('cards').insert(toInsert);
+    for (const card of toUpdate) {
+      await supabase.from('cards').update({ term: card.term, definition: card.definition, hint: card.hint, image_url: card.imageUrl ?? null }).eq('id', card.id!);
+    }
+
+    const updatedIds = new Set(toUpdate.map((c) => c.id));
+    const insertedTerms = new Set(toInsert.map((c) => c.term));
+    const toDelete = existing.filter((c) => !updatedIds.has(c.id) && !insertedTerms.has(c.term));
+    if (toDelete.length > 0) {
+      await supabase.from('cards').delete().in('id', toDelete.map((c) => c.id));
+    }
+
+    await supabase.from('card_sets').update({ updated_at: new Date().toISOString() }).eq('id', setId);
+    await fetchAll();
+  }, [cardSets, fetchAll]);
+
+  // ── Stats ──
+  const upsertCardStat = useCallback(async (cardId: string, isCorrect: boolean) => {
     if (!userId) return;
     const existing = await supabase
-      .from('card_stats')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('card_id', cardId)
-      .single();
+      .from('card_stats').select('*').eq('user_id', userId).eq('card_id', cardId).single();
 
     const prev = existing.data;
     const newStreak = isCorrect ? (prev?.streak ?? 0) + 1 : 0;
     const newCorrect = (prev?.correct ?? 0) + (isCorrect ? 1 : 0);
     const newIncorrect = (prev?.incorrect ?? 0) + (isCorrect ? 0 : 1);
-    const difficulty =
-      newStreak >= 5 ? 'easy' :
-      newStreak >= 2 ? 'medium' :
-      newIncorrect > newCorrect ? 'hard' : 'unrated';
+    const difficulty = newStreak >= 5 ? 'easy' : newStreak >= 2 ? 'medium' : newIncorrect > newCorrect ? 'hard' : 'unrated';
 
     await supabase.from('card_stats').upsert({
       id: prev?.id ?? generateId(),
@@ -202,14 +260,7 @@ export function useCardSets(userId: string | undefined) {
           lastStudied: Date.now(),
           cardStats: {
             ...set.studyStats.cardStats,
-            [cardId]: {
-              cardId,
-              correct: newCorrect,
-              incorrect: newIncorrect,
-              streak: newStreak,
-              difficulty: difficulty as CardStat['difficulty'],
-              lastReviewed: Date.now(),
-            },
+            [cardId]: { cardId, correct: newCorrect, incorrect: newIncorrect, streak: newStreak, difficulty: difficulty as CardStat['difficulty'], lastReviewed: Date.now() },
           },
         },
       };
@@ -219,58 +270,38 @@ export function useCardSets(userId: string | undefined) {
   const resetStats = useCallback(async (setId: string) => {
     const set = cardSets.find((s) => s.id === setId);
     if (!set || !userId) return;
-    const cardIds = set.cards.map((c) => c.id);
-    await supabase.from('card_stats').delete().eq('user_id', userId).in('card_id', cardIds);
+    await supabase.from('card_stats').delete().eq('user_id', userId).in('card_id', set.cards.map((c) => c.id));
     await fetchAll();
   }, [cardSets, userId, fetchAll]);
 
-  const saveCardsForSet = useCallback(async (
-    setId: string,
-    cards: { id?: string; term: string; definition: string; hint?: string; isNew?: boolean }[]
-  ) => {
-    const existing = cardSets.find((s) => s.id === setId)?.cards ?? [];
-    const existingIds = new Set(existing.map((c) => c.id));
-
-    const toInsert = cards
-      .filter((c: { id?: string; isNew?: boolean }) => c.isNew || !c.id || !existingIds.has(c.id))
-      .filter((c: { term: string; definition: string }) => c.term.trim() && c.definition.trim())
-      .map((c: { term: string; definition: string; hint?: string }, i: number) => ({ set_id: setId, term: c.term, definition: c.definition, hint: c.hint, position: i }));
-
-    const toUpdate = cards
-      .filter((c: { id?: string; isNew?: boolean }) => c.id && existingIds.has(c.id) && !c.isNew)
-      .filter((c: { term: string; definition: string }) => c.term.trim() && c.definition.trim());
-
-    if (toInsert.length > 0) await supabase.from('cards').insert(toInsert);
-    for (const card of toUpdate) {
-      await supabase.from('cards').update({ term: card.term, definition: card.definition, hint: card.hint }).eq('id', card.id!);
-    }
-
-    const updatedIds = new Set(toUpdate.map((c: { id?: string }) => c.id));
-    const insertedTerms = new Set(toInsert.map((c: { term: string }) => c.term));
-    const toDelete = existing.filter(
-      (c) => !updatedIds.has(c.id) && !insertedTerms.has(c.term)
-    );
-    if (toDelete.length > 0) {
-      await supabase.from('cards').delete().in('id', toDelete.map((c) => c.id));
-    }
-
-    await supabase.from('card_sets').update({ updated_at: new Date().toISOString() }).eq('id', setId);
+  // ── Folders ──
+  const createFolder = useCallback(async (name: string, description?: string, color?: string): Promise<Folder | null> => {
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from('folders')
+      .insert({ user_id: userId, name, description, color: color ?? '#388bfd' })
+      .select().single();
+    if (error || !data) return null;
     await fetchAll();
-  }, [cardSets, fetchAll]);
+    return { id: data.id, name: data.name, description: data.description, color: data.color, createdAt: new Date(data.created_at).getTime() };
+  }, [userId, fetchAll]);
+
+  const updateFolder = useCallback(async (id: string, updates: { name?: string; description?: string; color?: string }) => {
+    await supabase.from('folders').update(updates).eq('id', id);
+    await fetchAll();
+  }, [fetchAll]);
+
+  const deleteFolder = useCallback(async (id: string) => {
+    await supabase.from('card_sets').update({ folder_id: null }).eq('folder_id', id);
+    await supabase.from('folders').delete().eq('id', id);
+    await fetchAll();
+  }, [fetchAll]);
 
   return {
-    cardSets,
-    loading,
-    fetchAll,
-    createCardSet,
-    updateCardSet,
-    deleteCardSet,
-    duplicateCardSet,
-    addCard,
-    updateCard,
-    deleteCard,
-    upsertCardStat,
-    resetStats,
-    saveCardsForSet,
+    cardSets, folders, loading, fetchAll,
+    createCardSet, updateCardSet, deleteCardSet, duplicateCardSet,
+    addCard, updateCard, deleteCard, uploadCardImage, saveCardsForSet,
+    upsertCardStat, resetStats,
+    createFolder, updateFolder, deleteFolder,
   };
 }

@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ChevronLeft, Save } from 'lucide-react';
-import type { CardSet } from '../types';
+import { Plus, Trash2, ChevronLeft, Save, Image, X } from 'lucide-react';
+import type { CardSet, Folder } from '../types';
 
 interface EditSetPageProps {
   cardSets: CardSet[];
-  onUpdateSet: (id: string, updates: { title?: string; description?: string; category?: string }) => Promise<void>;
+  folders: Folder[];
+  onUpdateSet: (id: string, updates: { title?: string; description?: string; category?: string; folderId?: string | null }) => Promise<void>;
   onAddCard: (setId: string, term: string, definition: string, hint?: string) => Promise<void>;
-  onUpdateCard: (setId: string, cardId: string, updates: { term?: string; definition?: string; hint?: string }) => Promise<void>;
+  onUpdateCard: (setId: string, cardId: string, updates: { term?: string; definition?: string; hint?: string; imageUrl?: string }) => Promise<void>;
   onDeleteCard: (setId: string, cardId: string) => Promise<void>;
-  onSaveCards: (setId: string, cards: { id?: string; term: string; definition: string; hint?: string; isNew?: boolean }[]) => Promise<void>;
+  onSaveCards: (setId: string, cards: { id?: string; term: string; definition: string; hint?: string; imageUrl?: string; isNew?: boolean }[]) => Promise<void>;
+  onUploadImage: (file: File) => Promise<string | null>;
 }
 
 interface DraftCard {
@@ -17,19 +19,23 @@ interface DraftCard {
   term: string;
   definition: string;
   hint: string;
+  imageUrl?: string;
   isNew?: boolean;
+  uploading?: boolean;
 }
 
-export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: EditSetPageProps) {
+export default function EditSetPage({ cardSets, folders, onUpdateSet, onSaveCards, onUploadImage }: EditSetPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const set = cardSets.find(s => s.id === id);
+  const fileRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [title, setTitle] = useState(set?.title ?? '');
   const [description, setDescription] = useState(set?.description ?? '');
   const [category, setCategory] = useState(set?.category ?? '');
+  const [folderId, setFolderId] = useState<string>(set?.folderId ?? '');
   const [cards, setCards] = useState<DraftCard[]>(
-    set?.cards.map(c => ({ id: c.id, term: c.term, definition: c.definition, hint: c.hint ?? '' })) ?? []
+    set?.cards.map(c => ({ id: c.id, term: c.term, definition: c.definition, hint: c.hint ?? '', imageUrl: c.imageUrl })) ?? []
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -48,14 +54,20 @@ export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: Edit
   const updateCard = (i: number, field: keyof DraftCard, value: string) =>
     setCards(c => c.map((card, idx) => idx === i ? { ...card, [field]: value } : card));
 
+  const handleImageUpload = async (i: number, file: File) => {
+    setCards(c => c.map((card, idx) => idx === i ? { ...card, uploading: true } : card));
+    const url = await onUploadImage(file);
+    setCards(c => c.map((card, idx) => idx === i ? { ...card, imageUrl: url ?? undefined, uploading: false } : card));
+  };
+
   const handleSave = async () => {
     if (!title.trim()) { setError('제목을 입력하세요.'); return; }
     const validCards = cards.filter(c => c.term.trim() && c.definition.trim());
     if (validCards.length === 0) { setError('카드를 최소 1개 이상 추가하세요.'); return; }
     setLoading(true); setError('');
     try {
-      await onUpdateSet(id!, { title: title.trim(), description: description.trim() || undefined, category: category.trim() || undefined });
-      await onSaveCards(id!, validCards.map(c => ({ id: c.id, term: c.term.trim(), definition: c.definition.trim(), hint: c.hint.trim() || undefined, isNew: c.isNew })));
+      await onUpdateSet(id!, { title: title.trim(), description: description.trim() || undefined, category: category.trim() || undefined, folderId: folderId || null });
+      await onSaveCards(id!, validCards.map(c => ({ id: c.id, term: c.term.trim(), definition: c.definition.trim(), hint: c.hint.trim() || undefined, imageUrl: c.imageUrl, isNew: c.isNew })));
       navigate(`/set/${id}`);
     } catch {
       setError('저장에 실패했습니다.');
@@ -64,7 +76,7 @@ export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: Edit
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> 뒤로
@@ -76,13 +88,14 @@ export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: Edit
         </button>
       </div>
 
+      {/* Set info */}
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>제목 *</label>
             <input type="text" className="input" value={title} onChange={e => setTitle(e.target.value)} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>카테고리</label>
               <input type="text" className="input" placeholder="카테고리" value={category} onChange={e => setCategory(e.target.value)} />
@@ -91,18 +104,28 @@ export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: Edit
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>설명</label>
               <input type="text" className="input" placeholder="설명" value={description} onChange={e => setDescription(e.target.value)} />
             </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>폴더</label>
+              <select className="input" value={folderId} onChange={e => setFolderId(e.target.value)}
+                style={{ cursor: 'pointer' }}>
+                <option value="">폴더 없음</option>
+                {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
+      {/* Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
         {cards.map((card, i) => (
           <div key={i} className="card-row">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>카드 {i + 1}</span>
-              <button type="button" onClick={() => removeCard(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4 }}>
+              <button type="button" onClick={() => removeCard(i)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4 }}>
                 <Trash2 size={14} />
               </button>
             </div>
@@ -116,9 +139,36 @@ export default function EditSetPage({ cardSets, onUpdateSet, onSaveCards }: Edit
                 <input type="text" className="input" value={card.definition} onChange={e => updateCard(i, 'definition', e.target.value)} />
               </div>
             </div>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>힌트</label>
-              <input type="text" className="input" placeholder="힌트 (선택)" value={card.hint} onChange={e => updateCard(i, 'hint', e.target.value)} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start' }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>힌트 (선택)</label>
+                <input type="text" className="input" placeholder="힌트..." value={card.hint} onChange={e => updateCard(i, 'hint', e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>이미지</label>
+                {card.imageUrl ? (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <img src={card.imageUrl} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                    <button onClick={() => setCards(c => c.map((ca, idx) => idx === i ? { ...ca, imageUrl: undefined } : ca))}
+                      style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, background: 'var(--red)', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <X size={10} color="#fff" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input type="file" accept="image/*" style={{ display: 'none' }}
+                      ref={el => { fileRefs.current[i] = el; }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(i, f); }} />
+                    <button type="button" className="btn btn-secondary btn-sm"
+                      onClick={() => fileRefs.current[i]?.click()}
+                      disabled={card.uploading}
+                      style={{ height: 56, width: 56, padding: 0, flexDirection: 'column', gap: 2, fontSize: 10 }}>
+                      {card.uploading ? <span style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin .6s linear infinite' }} />
+                        : <><Image size={16} /><span>추가</span></>}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ))}
