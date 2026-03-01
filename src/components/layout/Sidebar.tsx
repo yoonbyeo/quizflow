@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight, Flame, RefreshCw, User as UserIcon, Settings, Sun, Moon, Shield, HelpCircle } from 'lucide-react';
+import { Home, BarChart2, Plus, Zap, LogOut, Library, Folder, AlertCircle, ChevronLeft, ChevronRight, Flame, RefreshCw, User as UserIcon, Settings, Sun, Moon, Shield, HelpCircle, Users } from 'lucide-react';
 import { signOut } from '../../hooks/useAuth';
 import { loadStreak } from '../../utils/streak';
 import type { User } from '@supabase/supabase-js';
@@ -68,6 +68,7 @@ export default function Sidebar({ user, cardSets, folders, collapsed, onToggleCo
     { to: '/', label: '홈', icon: Home },
     { to: '/library', label: '라이브러리', icon: Library },
     { to: '/folders', label: '폴더', icon: Folder },
+    { to: '/rooms', label: '그룹 스터디', icon: Users },
     { to: '/review', label: '오늘 복습', icon: RefreshCw, badge: dueCount > 0 ? dueCount : null },
     { to: '/wrong-note', label: '오답 노트', icon: AlertCircle, badge: wrongCardCount > 0 ? wrongCardCount : null },
     { to: '/stats', label: '통계', icon: BarChart2 },

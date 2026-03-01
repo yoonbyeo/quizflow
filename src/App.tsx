@@ -20,6 +20,8 @@ import ProfilePage from './pages/ProfilePage';
 import ReviewPage from './pages/ReviewPage';
 import PrivacyPage from './pages/PrivacyPage';
 import HelpPage from './pages/HelpPage';
+import StudyRoomsPage from './pages/StudyRoomsPage';
+import RoomDetailPage from './pages/RoomDetailPage';
 
 function Spinner() {
   return (
@@ -74,6 +76,8 @@ function AppContent() {
                 <Route path="/profile" element={<ProfilePage user={user} />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/help" element={<HelpPage />} />
+                <Route path="/rooms" element={<StudyRoomsPage user={user} />} />
+                <Route path="/rooms/:roomId" element={<RoomDetailPage user={user} cardSets={cardSets} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
