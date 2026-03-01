@@ -99,10 +99,7 @@ export default function EditSetPage({ cardSets, folders, onUpdateSet, onSaveCard
           <ChevronLeft size={15} /> 뒤로
         </button>
         <h1 style={{ fontSize: 18, fontWeight: 800 }}>세트 편집</h1>
-        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={loading}>
-          {loading ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} /> : <Save size={14} />}
-          저장
-        </button>
+        <div style={{ width: 60 }} />
       </div>
 
       {/* Set info */}

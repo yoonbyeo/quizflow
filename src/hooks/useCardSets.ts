@@ -214,13 +214,15 @@ export function useCardSets(userId: string | undefined) {
     // 전체 cards 배열에서 실제 position 계산 (카드 순서 보존)
     const validCards = cards.filter((c) => c.term.trim() && c.definition.trim());
 
+    // isNew 플래그가 명시적으로 true이거나, id가 없는 카드만 신규 삽입
     const toInsert = validCards
-      .filter((c) => c.isNew || !c.id || !existingIds.has(c.id))
+      .filter((c) => c.isNew === true || (!c.id))
       .map((c) => {
         const globalPos = validCards.indexOf(c);
         return { set_id: setId, term: c.term, definition: c.definition, hint: c.hint, image_url: c.imageUrl ?? null, position: globalPos };
       });
 
+    // id가 있고 기존에 존재하는 카드만 업데이트
     const toUpdate = validCards
       .filter((c) => c.id && existingIds.has(c.id) && !c.isNew);
 
@@ -230,9 +232,9 @@ export function useCardSets(userId: string | undefined) {
       await supabase.from('cards').update({ term: card.term, definition: card.definition, hint: card.hint, image_url: card.imageUrl ?? null, position: globalPos }).eq('id', card.id!);
     }
 
+    // 업데이트되지 않은 기존 카드(삭제된 것) 제거 — id 기준으로만 판단
     const updatedIds = new Set(toUpdate.map((c) => c.id));
-    const insertedTerms = new Set(toInsert.map((c) => c.term));
-    const toDelete = existing.filter((c) => !updatedIds.has(c.id) && !insertedTerms.has(c.term));
+    const toDelete = existing.filter((c) => !updatedIds.has(c.id));
     if (toDelete.length > 0) {
       await supabase.from('cards').delete().in('id', toDelete.map((c) => c.id));
     }
