@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ThumbsUp, ThumbsDown, RotateCcw, CheckCircle, Brain } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
+import InfoTooltip from '../components/ui/InfoTooltip';
 import type { CardSet, Card } from '../types';
 
 interface ReviewPageProps {
@@ -93,9 +94,14 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> 홈
         </button>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--purple)' }}>오늘의 복습</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{queue.length}장 대기 중</div>
+        <div style={{ textAlign: 'center', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--purple)' }}>오늘의 복습</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{queue.length}장 대기 중</div>
+          </div>
+          <InfoTooltip
+            text={'간격 반복(Spaced Repetition) 알고리즘으로 선별된 카드입니다.\n\n• 알았어요 → 다음 복습 간격이 늘어납니다 (1일→3일→7일→14일→30일)\n• 몰랐어요 → 다음날 다시 복습합니다\n\n망각 곡선을 역이용해 최소한의 시간으로 장기 기억을 유지합니다.'}
+            position="bottom" width={280} size={12} />
         </div>
         <span style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{idx + 1} / {queue.length}</span>
       </div>

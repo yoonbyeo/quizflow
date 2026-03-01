@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
+import InfoTooltip from '../components/ui/InfoTooltip';
 import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
 import { loadTestProgress, loadTestCompleted } from './TestPage';
 import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
@@ -215,6 +216,11 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
             <div style={{ fontSize: 14, fontWeight: 700 }}>오늘 복습할 카드 <span style={{ color: 'var(--purple)' }}>{dueCount}장</span></div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>간격 반복 학습으로 장기 기억을 강화하세요</div>
           </div>
+          <span onClick={e => e.stopPropagation()}>
+            <InfoTooltip
+              text={'간격 반복(Spaced Repetition) 알고리즘이 선별한 카드입니다.\n\n학습할수록 복습 주기가 늘어납니다:\n1일 → 3일 → 7일 → 14일 → 30일\n\n틀리면 다음 날 다시 복습 대상이 됩니다.'}
+              position="left" width={250} />
+          </span>
           <ArrowRight size={16} color="var(--text-3)" />
         </div>
       )}
@@ -224,6 +230,9 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
         <section style={{ marginBottom: 36 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-2)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Brain size={16} color="var(--purple)" /> 멈춘 지점에서 계속하기
+            <InfoTooltip
+              text={'학습을 중간에 나간 세트가 여기에 표시됩니다.\n\n• 플래시카드: 마지막으로 본 카드 위치에서 재개\n• 학습하기: 저장된 큐(남은 카드 목록)에서 재개\n• 테스트: 마지막 설정으로 바로 시작\n\n모든 카드를 완료하면 이 목록에서 사라집니다.'}
+              position="right" width={270} />
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {inProgress.map(set => {

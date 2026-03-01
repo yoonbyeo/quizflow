@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, TrendingUp, BookOpen, Zap, Target, Flame, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { loadStreak } from '../utils/streak';
+import InfoTooltip from '../components/ui/InfoTooltip';
 import type { CardSet, CardStat } from '../types';
 
 interface StatsPageProps {
@@ -94,6 +95,9 @@ function StudyCalendar() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
           <CalendarDays size={16} color="var(--blue)" /> 학습 캘린더
+          <InfoTooltip
+            text={'카드를 평가(알았어요/몰랐어요)할 때마다 오늘 날짜에 기록됩니다.\n색이 진할수록 그날 학습 횟수가 많습니다.\n◀ ▶ 버튼으로 이전 달을 탐색할 수 있습니다.'}
+            position="right" width={250} />
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {streak > 0 && (
@@ -302,7 +306,12 @@ export default function StatsPage({ cardSets }: StatsPageProps) {
       {/* Mastery breakdown */}
       {studied > 0 && (
         <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>숙달도 분포</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+            숙달도 분포
+            <InfoTooltip
+              text={'각 카드의 정답/오답 이력을 바탕으로 난이도가 자동 분류됩니다.\n\n• 숙달: 정답 연속 2회 이상\n• 학습중: 정답과 오답이 섞임\n• 어려움: 최근 오답이 많음\n• 미평가: 아직 학습하지 않은 카드'}
+              position="right" width={250} />
+          </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: '숙달', value: mastered, color: 'var(--green)', bg: 'var(--green-bg)' },

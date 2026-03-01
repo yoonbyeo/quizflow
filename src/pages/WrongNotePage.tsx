@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ChevronRight, BookOpen, Brain, RotateCcw, Filter } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
+import InfoTooltip from '../components/ui/InfoTooltip';
 import type { CardSet } from '../types';
 
 interface WrongNotePageProps {
@@ -72,6 +73,9 @@ export default function WrongNotePage({ cardSets }: WrongNotePageProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <AlertCircle size={20} color="var(--red)" />
           <h1 style={{ fontSize: 22, fontWeight: 800 }}>오답 노트</h1>
+          <InfoTooltip
+            text={'학습하기·테스트·쓰기 모드에서 한 번이라도 틀린 카드가 자동으로 기록됩니다.\n\n• 오답 횟수순 또는 오답률순으로 정렬할 수 있습니다.\n• 3회 이상 틀린 카드는 "집중 필요" 카드로 표시됩니다.\n• 카드를 클릭하면 정의를 바로 확인할 수 있습니다.'}
+            position="right" width={270} />
         </div>
         <p style={{ fontSize: 14, color: 'var(--text-2)' }}>자주 틀리는 카드를 모아 집중 학습하세요</p>
       </div>

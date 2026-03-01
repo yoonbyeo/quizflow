@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff, Download } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
+import InfoTooltip from '../components/ui/InfoTooltip';
 import { cardsToCSV, downloadCSV } from '../utils/csv';
 import type { CardSet, CardStat } from '../types';
 
@@ -117,11 +118,31 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
   const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
 
   const modes = [
-    { label: '플래시카드', icon: Zap, color: 'var(--blue)', bg: 'var(--blue-bg)', path: `/flashcard/${id}`, desc: '카드 넘기며 암기' },
-    { label: '학습하기', icon: Brain, color: 'var(--purple)', bg: 'var(--purple-bg)', path: `/learn/${id}`, desc: 'AI 적응형 학습' },
-    { label: '테스트', icon: PenLine, color: 'var(--green)', bg: 'var(--green-bg)', path: `/test/${id}`, desc: '객관식 · 주관식' },
-    { label: '매칭', icon: Shuffle, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/match/${id}`, desc: '짝 맞추기 게임' },
-    { label: '쓰기', icon: BookText, color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: `/write/${id}`, desc: '직접 입력 학습' },
+    {
+      label: '플래시카드', icon: Zap, color: 'var(--blue)', bg: 'var(--blue-bg)', path: `/flashcard/${id}`,
+      desc: '카드 넘기며 암기',
+      info: '앞면(용어)을 보고 정의를 떠올린 뒤 카드를 뒤집어 확인합니다.\n알았어요 / 몰랐어요로 자기 평가하면 숙달도가 기록됩니다.\n← → 키보드, Space로 뒤집기도 가능합니다.',
+    },
+    {
+      label: '학습하기', icon: Brain, color: 'var(--purple)', bg: 'var(--purple-bg)', path: `/learn/${id}`,
+      desc: 'AI 적응형 학습',
+      info: '플래시카드로 전체 카드를 먼저 훑은 뒤, 틀린 카드를 객관식·주관식으로 반복 출제합니다.\n틀린 카드는 큐에 다시 추가되어 모두 맞힐 때까지 반복합니다.\n진행 상태가 저장되어 중간에 나가도 이어서 학습할 수 있습니다.',
+    },
+    {
+      label: '테스트', icon: PenLine, color: 'var(--green)', bg: 'var(--green-bg)', path: `/test/${id}`,
+      desc: '객관식 · 주관식',
+      info: '설정한 문제 수만큼 객관식·주관식 문제를 출제합니다.\n오답 선택지는 같은 세트의 다른 카드에서 랜덤으로 구성됩니다.\nA/B/C/D 키보드 단축키로 빠르게 답할 수 있습니다.',
+    },
+    {
+      label: '매칭', icon: Shuffle, color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: `/match/${id}`,
+      desc: '짝 맞추기 게임',
+      info: '용어와 정의가 화면에 섞여 나옵니다.\n올바른 용어-정의 쌍을 클릭해서 연결하세요.\n모두 맞출수록 랭킹 시간이 기록됩니다.',
+    },
+    {
+      label: '쓰기', icon: BookText, color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: `/write/${id}`,
+      desc: '직접 입력 학습',
+      info: '정의를 보고 용어를 직접 타이핑합니다.\n정확히 입력하면 정답 처리되며, 틀리면 오답 노트에 기록됩니다.\n직접 쓰는 방식이라 장기 기억에 효과적입니다.',
+    },
   ];
 
   return (
@@ -180,15 +201,18 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       {/* ── 학습 모드 ── */}
       <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>학습 모드</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: 32 }}>
-        {modes.map(({ label, icon: Icon, color, bg, path, desc }) => (
-          <Link key={label} to={path} className="mode-btn" style={{ padding: 16 }}>
+        {modes.map(({ label, icon: Icon, color, bg, path, desc, info }) => (
+          <Link key={label} to={path} className="mode-btn" style={{ padding: 16, position: 'relative' }}>
             <div className="mode-icon" style={{ background: bg, width: 38, height: 38, borderRadius: 10 }}>
               <Icon size={17} color={color} />
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</div>
               <div style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{desc}</div>
             </div>
+            <span onClick={e => e.preventDefault()} style={{ flexShrink: 0 }}>
+              <InfoTooltip text={info} width={260} position="top" />
+            </span>
           </Link>
         ))}
       </div>
@@ -198,7 +222,12 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
 
       {/* ── 카드 목록 ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700 }}>카드 목록 ({total})</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700 }}>카드 목록 ({total})</h2>
+          <InfoTooltip
+            text={'숙달: 정답률이 높은 카드\n학습중: 일부 맞힌 카드\n어려움: 자주 틀리는 카드\n미평가: 아직 학습하지 않은 카드'}
+            position="bottom" width={200} />
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* 블러 토글 */}
           <button
@@ -217,6 +246,7 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
             {blurDefs ? <EyeOff size={13} /> : <Eye size={13} />}
             뜻 {blurDefs ? '숨김' : '표시'}
           </button>
+          <InfoTooltip text={'용어 또는 뜻을 블러 처리해 자가 테스트할 수 있습니다.\n블러 상태에서 각 카드를 클릭하면 해당 카드만 개별적으로 확인할 수 있습니다.'} position="top" width={240} />
           {stats.length > 0 && (
             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', gap: 4, fontSize: 12 }}
               onClick={() => { if (confirm('통계를 초기화할까요?')) onResetStats(id!); }}>
