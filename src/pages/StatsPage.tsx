@@ -17,65 +17,64 @@ function getCalCount(dateStr: string): number {
   } catch { return 0; }
 }
 
-// ── 학습 캘린더 컴포넌트 (월별 달력 방식) ──
+// 보라색 농도 단계 (학습 0 ~ 최대)
+const PURPLE_LEVELS = [
+  'transparent',           // 0회 (미학습)
+  'rgba(139,92,246,.25)',  // 1단계 (연보라)
+  'rgba(139,92,246,.5)',   // 2단계
+  'rgba(139,92,246,.75)',  // 3단계
+  'rgba(139,92,246,1)',    // 4단계 (진보라)
+];
+
+function getPurpleColor(count: number, max: number): string {
+  if (count === 0) return PURPLE_LEVELS[0];
+  const ratio = count / max;
+  if (ratio <= 0.25) return PURPLE_LEVELS[1];
+  if (ratio <= 0.5)  return PURPLE_LEVELS[2];
+  if (ratio <= 0.75) return PURPLE_LEVELS[3];
+  return PURPLE_LEVELS[4];
+}
+
+// ── 학습 캘린더 컴포넌트 ──
 function StudyCalendar() {
   const today = new Date();
   const streak = loadStreak();
   const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-based
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [tooltip, setTooltip] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
 
   const todayStr = today.toISOString().slice(0, 10);
+  const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+  const MONTH_NAMES = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
-  // 해당 월의 모든 날짜 데이터 수집
+  // 해당 월 날짜 데이터
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const monthData: { date: string; count: number; day: number }[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    monthData.push({ date: dateStr, count: getCalCount(dateStr), day: d });
+    const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    monthData.push({ date: ds, count: getCalCount(ds), day: d });
   }
 
-  // 이달 1일의 요일 (0=일, 1=월 ... 6=토)
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
-
   const maxCount = Math.max(...monthData.map(d => d.count), 1);
-  const totalDays = monthData.filter(d => d.count > 0).length;
+  const studiedDays = monthData.filter(d => d.count > 0).length;
   const totalActivity = monthData.reduce((s, d) => s + d.count, 0);
-
-  const getColor = (count: number) => {
-    if (count === 0) return 'transparent';
-    const intensity = count / maxCount;
-    if (intensity < 0.25) return 'rgba(99,179,237,.35)';
-    if (intensity < 0.5)  return 'rgba(99,179,237,.6)';
-    if (intensity < 0.75) return 'rgba(99,179,237,.85)';
-    return 'var(--blue)';
-  };
-
-  const getBorderColor = (count: number) => {
-    if (count === 0) return 'var(--border)';
-    return 'transparent';
-  };
+  const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
 
   const goPrev = () => {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
     else setViewMonth(m => m - 1);
   };
   const goNext = () => {
-    const nextM = viewMonth === 11 ? 0 : viewMonth + 1;
-    const nextY = viewMonth === 11 ? viewYear + 1 : viewYear;
-    // 미래 달은 이동 불가
-    if (nextY > today.getFullYear() || (nextY === today.getFullYear() && nextM > today.getMonth())) return;
+    const nM = viewMonth === 11 ? 0 : viewMonth + 1;
+    const nY = viewMonth === 11 ? viewYear + 1 : viewYear;
+    if (nY > today.getFullYear() || (nY === today.getFullYear() && nM > today.getMonth())) return;
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
     else setViewMonth(m => m + 1);
   };
 
-  const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
-  const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
-  const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-
-  const [tooltip, setTooltip] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
-
-  // 달 전체 학습 기록도 미리 로드해 최근 6개월 활동 요약용
-  const recentMonths: { label: string; count: number }[] = [];
+  // 최근 6개월 요약
+  const recentMonths: { label: string; count: number; monthIdx: number }[] = [];
   for (let i = 5; i >= 0; i--) {
     let m = today.getMonth() - i;
     let y = today.getFullYear();
@@ -83,111 +82,126 @@ function StudyCalendar() {
     const dim = new Date(y, m + 1, 0).getDate();
     let total = 0;
     for (let d = 1; d <= dim; d++) {
-      const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      total += getCalCount(ds);
+      total += getCalCount(`${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
     }
-    recentMonths.push({ label: MONTH_NAMES[m], count: total });
+    recentMonths.push({ label: MONTH_NAMES[m], count: total, monthIdx: m });
   }
+  const maxMonthCount = Math.max(...recentMonths.map(r => r.count), 1);
 
   return (
-    <div className="card" style={{ padding: '24px 28px', marginBottom: 24 }}>
+    <div className="card" style={{ padding: '20px 22px', marginBottom: 24 }}>
       {/* 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CalendarDays size={16} color="var(--blue)" /> 학습 캘린더
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <CalendarDays size={15} color="var(--purple)" /> 학습 캘린더
           <InfoTooltip
-            text={'카드를 평가(알았어요/몰랐어요)할 때마다 오늘 날짜에 기록됩니다.\n색이 진할수록 그날 학습 횟수가 많습니다.\n◀ ▶ 버튼으로 이전 달을 탐색할 수 있습니다.'}
+            text={'카드를 평가(알았어요/몰랐어요)할 때마다 오늘 날짜에 기록됩니다.\n보라색이 진할수록 그날 학습 횟수가 많습니다.\n◀ ▶ 버튼으로 이전 달을 탐색할 수 있습니다.'}
             position="right" width={250} />
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {streak > 0 && (
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--yellow)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Flame size={14} fill="var(--yellow)" color="var(--yellow)" /> {streak}일 연속
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--yellow)', display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Flame size={13} fill="var(--yellow)" color="var(--yellow)" /> {streak}일 연속
             </span>
           )}
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            이번 달 {totalDays}일 · {totalActivity}회
+            {studiedDays}일 학습 · {totalActivity}회
           </span>
         </div>
       </div>
 
       {/* 월 네비게이션 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <button onClick={goPrev} className="btn btn-ghost btn-sm" style={{ padding: '6px 10px' }}>
-          <ChevronLeft size={16} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button onClick={goPrev} className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }}>
+          <ChevronLeft size={15} />
         </button>
-        <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-1)' }}>
-          {viewYear}년 {MONTH_NAMES[viewMonth]}
-        </span>
+        <span style={{ fontSize: 15, fontWeight: 800 }}>{viewYear}년 {MONTH_NAMES[viewMonth]}</span>
         <button onClick={goNext} className="btn btn-ghost btn-sm"
-          style={{ padding: '6px 10px', opacity: isCurrentMonth ? 0.3 : 1, cursor: isCurrentMonth ? 'default' : 'pointer' }}
+          style={{ padding: '4px 8px', opacity: isCurrentMonth ? 0.25 : 1, cursor: isCurrentMonth ? 'default' : 'pointer' }}
           disabled={isCurrentMonth}>
-          <ChevronRight size={16} />
+          <ChevronRight size={15} />
         </button>
       </div>
 
       {/* 요일 헤더 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
         {WEEK_LABELS.map(w => (
-          <div key={w} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: w === '일' ? 'var(--red)' : w === '토' ? 'var(--blue)' : 'var(--text-3)', padding: '4px 0' }}>
+          <div key={w} style={{
+            textAlign: 'center', fontSize: 11, fontWeight: 600,
+            color: w === '일' ? 'var(--red)' : w === '토' ? 'rgba(139,92,246,.7)' : 'var(--text-3)',
+            padding: '3px 0',
+          }}>
             {w}
           </div>
         ))}
       </div>
 
       {/* 날짜 그리드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-        {/* 빈 칸 (월 시작 전) */}
-        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-          <div key={`empty-${i}`} />
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e-${i}`} />)}
 
-        {/* 날짜 셀 */}
         {monthData.map(({ date, count, day }) => {
           const isToday = date === todayStr;
           const isFuture = date > todayStr;
+          const studied = count > 0;
+          const bgColor = isFuture ? 'transparent' : getPurpleColor(count, maxCount);
+          const textBright = !isFuture && studied && count / maxCount > 0.5;
+
           return (
             <div
               key={date}
               style={{
                 aspectRatio: '1',
-                borderRadius: 8,
-                background: isFuture ? 'transparent' : getColor(count),
+                borderRadius: 7,
+                background: bgColor,
                 border: isToday
-                  ? '2px solid var(--blue)'
-                  : `1px solid ${isFuture ? 'transparent' : getBorderColor(count)}`,
+                  ? '2px solid rgba(139,92,246,1)'
+                  : isFuture
+                    ? 'none'
+                    : studied
+                      ? '1px solid rgba(139,92,246,.3)'
+                      : '1px solid var(--border)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: isFuture ? 'default' : 'pointer',
+                transition: 'transform .1s, box-shadow .1s',
                 position: 'relative',
-                transition: 'transform .1s',
               }}
               onMouseEnter={e => {
                 if (isFuture) return;
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const rect = e.currentTarget.getBoundingClientRect();
                 setTooltip({ date, count, x: rect.left + rect.width / 2, y: rect.top });
-                (e.currentTarget as HTMLElement).style.transform = 'scale(1.08)';
+                e.currentTarget.style.transform = 'scale(1.12)';
+                if (studied) e.currentTarget.style.boxShadow = '0 2px 8px rgba(139,92,246,.4)';
               }}
               onMouseLeave={e => {
                 setTooltip(null);
-                (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
               }}
             >
               <span style={{
-                fontSize: 13,
-                fontWeight: isToday ? 800 : 500,
+                fontSize: 12,
+                fontWeight: isToday ? 900 : studied ? 700 : 400,
                 color: isFuture
-                  ? 'var(--text-3)'
-                  : count > 0
-                    ? (count / maxCount > 0.5 ? '#fff' : 'var(--text-1)')
-                    : 'var(--text-2)',
+                  ? 'var(--bg-3)'
+                  : textBright ? '#fff'
+                  : studied ? 'rgba(139,92,246,1)'
+                  : 'var(--text-3)',
+                lineHeight: 1.2,
               }}>
                 {day}
               </span>
-              {count > 0 && !isFuture && (
-                <span style={{ fontSize: 9, color: count / maxCount > 0.5 ? 'rgba(255,255,255,.8)' : 'var(--blue)', fontWeight: 700, lineHeight: 1 }}>
+              {/* 학습 횟수 도트 또는 숫자 */}
+              {studied && !isFuture && (
+                <span style={{
+                  fontSize: 8,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: textBright ? 'rgba(255,255,255,.85)' : 'rgba(139,92,246,.9)',
+                }}>
                   {count}
                 </span>
               )}
@@ -196,52 +210,66 @@ function StudyCalendar() {
         })}
       </div>
 
+      {/* 범례 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, justifyContent: 'flex-end' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>적음</span>
+        {PURPLE_LEVELS.slice(1).map((bg, i) => (
+          <div key={i} style={{ width: 10, height: 10, borderRadius: 3, background: bg, border: '1px solid rgba(139,92,246,.2)' }} />
+        ))}
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>많음</span>
+      </div>
+
       {/* 툴팁 */}
       {tooltip && (
         <div style={{
           position: 'fixed',
           left: tooltip.x,
-          top: tooltip.y - 44,
+          top: tooltip.y - 48,
           transform: 'translateX(-50%)',
           background: 'var(--bg-0)',
-          border: '1px solid var(--border)',
+          border: '1px solid rgba(139,92,246,.4)',
           borderRadius: 8,
-          padding: '6px 12px',
+          padding: '7px 13px',
           fontSize: 12,
           color: 'var(--text-1)',
           pointerEvents: 'none',
           zIndex: 9999,
           whiteSpace: 'nowrap',
-          boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+          boxShadow: '0 4px 16px rgba(139,92,246,.2)',
         }}>
           {new Date(tooltip.date + 'T00:00:00').toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
           {' · '}
-          <strong>{tooltip.count > 0 ? `${tooltip.count}회 학습` : '학습 없음'}</strong>
+          <strong style={{ color: tooltip.count > 0 ? 'rgba(139,92,246,1)' : 'var(--text-3)' }}>
+            {tooltip.count > 0 ? `${tooltip.count}회 학습` : '학습 없음'}
+          </strong>
         </div>
       )}
 
-      {/* 최근 6개월 막대 미니 차트 */}
-      <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>최근 6개월</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 60 }}>
-          {recentMonths.map(({ label, count }) => {
-            const maxMonthCount = Math.max(...recentMonths.map(m => m.count), 1);
-            const heightPct = count > 0 ? Math.max((count / maxMonthCount) * 100, 8) : 4;
-            const isCurrentMonthBar = label === MONTH_NAMES[today.getMonth()];
+      {/* 최근 6개월 막대 */}
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>최근 6개월</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 52 }}>
+          {recentMonths.map(({ label, count, monthIdx }) => {
+            const heightPct = count > 0 ? Math.max((count / maxMonthCount) * 100, 10) : 3;
+            const isCur = monthIdx === today.getMonth();
             return (
-              <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                {count > 0 && (
-                  <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{count}</span>
-                )}
+              <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                {count > 0 && <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600 }}>{count}</span>}
                 <div style={{
                   width: '100%',
                   height: `${heightPct}%`,
-                  minHeight: count > 0 ? 6 : 3,
-                  borderRadius: 4,
-                  background: isCurrentMonthBar ? 'var(--blue)' : count > 0 ? 'rgba(99,179,237,.45)' : 'var(--bg-3)',
+                  minHeight: count > 0 ? 5 : 2,
+                  borderRadius: 3,
+                  background: isCur
+                    ? 'rgba(139,92,246,1)'
+                    : count > 0
+                      ? 'rgba(139,92,246,.4)'
+                      : 'var(--bg-3)',
                   transition: 'height .3s',
                 }} />
-                <span style={{ fontSize: 11, color: isCurrentMonthBar ? 'var(--blue)' : 'var(--text-3)', fontWeight: isCurrentMonthBar ? 700 : 400 }}>{label}</span>
+                <span style={{ fontSize: 10, color: isCur ? 'rgba(139,92,246,1)' : 'var(--text-3)', fontWeight: isCur ? 700 : 400 }}>
+                  {label}
+                </span>
               </div>
             );
           })}
