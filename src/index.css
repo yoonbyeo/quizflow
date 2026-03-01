@@ -321,7 +321,6 @@ textarea.input { resize: vertical; min-height: 72px; }
   cursor: pointer;
   transition: border-color .2s, box-shadow .2s, transform .15s;
   position: relative;
-  overflow: hidden;
   box-shadow: var(--shadow-card);
 }
 .set-card::before {
@@ -332,6 +331,7 @@ textarea.input { resize: vertical; min-height: 72px; }
   background: linear-gradient(90deg, #1f6feb, #6e40c9);
   opacity: 0;
   transition: opacity .2s;
+  border-radius: 14px 14px 0 0;
 }
 .set-card:hover {
   border-color: rgba(56,139,253,.35);
