@@ -11,6 +11,14 @@ function saveTestConfig(setId: string, cfg: any) {
 function loadTestConfig(setId: string): any | null {
   try { const v = localStorage.getItem(`qf-testcfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
+
+// 테스트 진행 인덱스 저장/불러오기 (홈 진행도용)
+export function saveTestProgress(setId: string, idx: number, total: number) {
+  try { localStorage.setItem(`qf-testprog-${setId}`, JSON.stringify({ idx, total })); } catch {}
+}
+export function loadTestProgress(setId: string): { idx: number; total: number } | null {
+  try { const v = localStorage.getItem(`qf-testprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
@@ -235,11 +243,14 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     if (isCorrect) setScore(s => s + 1);
     setAnswers(prev => [...prev, { q: q.question, correct: q.correctAnswer, user: answer, ok: isCorrect }]);
     await onUpdateStat(q.cardId, isCorrect);
+    // 진행도 저장 (홈 진행도 표시용)
+    if (id) saveTestProgress(id, qIdx + 1, questions.length);
   };
 
   const next = () => {
     if (qIdx + 1 >= questions.length) {
       setScreen('result');
+      if (id) saveTestProgress(id, questions.length, questions.length);
       return;
     }
     setQIdx(i => i + 1);

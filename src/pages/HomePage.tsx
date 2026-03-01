@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { loadProgress, loadLastMode } from './FlashcardPage'; // loadProgress: 플래시카드 이어보기 인덱스
+import { loadProgress, loadLastMode } from './FlashcardPage';
+import { loadTestProgress } from './TestPage';
+import { loadLearnProgress } from './LearnPage';
 import type { CardSet, CardStat, Folder } from '../types';
 
 // 모드 → 경로/라벨/색상 매핑
@@ -178,18 +180,35 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {inProgress.map(set => {
-              const cardStatMap = set.studyStats?.cardStats ?? {};
               const total = set.cards.length;
-
-              // 학습 통계 — 실제 Supabase 기록 기준
-              const studied = set.cards.filter(c => cardStatMap[c.id]).length;
-              const mastered = (Object.values(cardStatMap) as any[]).filter(s => s.difficulty === 'easy').length;
-              const pct = total > 0 ? Math.round((studied / total) * 100) : 0;
-              const masteredPct = total > 0 ? Math.round((mastered / total) * 100) : 0;
-
-              // 마지막 학습 모드
               const lastMode = loadLastMode(set.id) ?? 'flashcard';
               const meta = MODE_META[lastMode];
+
+              // ── 모드별 진행도 계산 (localStorage 기준 "내가 넘어간 카드 수") ──
+              let viewedCount = 0;
+              let viewedTotal = total;
+
+              if (lastMode === 'flashcard') {
+                const savedIdx = loadProgress(set.id);
+                viewedCount = Math.min(savedIdx + 1, total);
+                viewedTotal = total;
+              } else if (lastMode === 'test') {
+                const prog = loadTestProgress(set.id);
+                viewedCount = prog?.idx ?? 0;
+                viewedTotal = prog?.total ?? total;
+              } else if (lastMode === 'learn') {
+                const prog = loadLearnProgress(set.id);
+                viewedCount = prog?.mastered ?? 0;
+                viewedTotal = prog?.total ?? total;
+              } else {
+                // match, write: 학습 기록 기반
+                const cardStatMap = set.studyStats?.cardStats ?? {};
+                viewedCount = set.cards.filter(c => cardStatMap[c.id]).length;
+                viewedTotal = total;
+              }
+
+              const pct = viewedTotal > 0 ? Math.round((viewedCount / viewedTotal) * 100) : 0;
+
               // 플래시카드는 savedIdx에서 이어서, 나머지는 ?resume=1로 바로 시작
               const savedIdx = loadProgress(set.id);
               const continuePath = lastMode === 'flashcard'
@@ -216,28 +235,21 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
                     {set.title}
                   </div>
 
-                  {/* 진행도 바 (이중) */}
+                  {/* 진행도 바 */}
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ height: 8, background: 'var(--bg-3)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
-                      {/* 전체 학습 진행 */}
-                      <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'linear-gradient(90deg, #1f6feb, #6e40c9)', borderRadius: 99, transition: 'width .4s' }} />
-                      {/* 숙달 진행 (초록) */}
-                      {mastered > 0 && (
-                        <div style={{ position: 'absolute', inset: 0, width: `${masteredPct}%`, background: 'var(--green)', borderRadius: 99, opacity: 0.85 }} />
-                      )}
+                      <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: `linear-gradient(90deg, ${meta.color}, color-mix(in srgb, ${meta.color} 60%, #6e40c9))`, borderRadius: 99, transition: 'width .4s' }} />
                     </div>
                   </div>
 
                   {/* 진행 텍스트 */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>
-                      {pct}% 완료 · {studied}/{total}개 학습
+                      {pct}% 완료 · {viewedCount}/{viewedTotal}개
                     </span>
-                    {mastered > 0 && (
-                      <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
-                        ✓ {mastered}개 숙달
-                      </span>
-                    )}
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                      {lastMode === 'flashcard' ? '열람 기준' : lastMode === 'test' ? '제출 기준' : lastMode === 'learn' ? '숙달 기준' : '학습 기준'}
+                    </span>
                   </div>
 
                   {/* 계속하기 버튼 */}

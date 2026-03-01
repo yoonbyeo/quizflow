@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RotateCcw, ThumbsUp, ThumbsDown, Shuffle, Settings } from 'lucide-react';
 import { shuffleArray } from '../utils';
@@ -10,15 +10,15 @@ interface FlashcardPageProps {
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
 }
 
-// 마지막 카드 인덱스를 localStorage에 저장
-function saveProgress(setId: string, idx: number) {
+// ── 진행 상태 저장/불러오기 ──
+export function saveProgress(setId: string, idx: number) {
   try { localStorage.setItem(`qf-progress-${setId}`, String(idx)); } catch {}
 }
 export function loadProgress(setId: string): number {
-  try { return parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0; } catch { return 0; }
+  try { return Math.max(0, parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0); } catch { return 0; }
 }
 
-// 마지막 학습 모드 저장/불러오기
+// ── 마지막 학습 모드 저장/불러오기 ──
 export type LastMode = 'flashcard' | 'learn' | 'test' | 'match' | 'write';
 export function saveLastMode(setId: string, mode: LastMode) {
   try { localStorage.setItem(`qf-lastmode-${setId}`, mode); } catch {}
@@ -33,36 +33,57 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
   const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
 
-  // 진입 시 마지막 모드 저장
+  // 진입 즉시 모드 저장
   if (id) saveLastMode(id, 'flashcard');
 
-  const [cards, setCards] = useState(() => set ? [...set.cards] : []);
-  const paramIdx = parseInt(searchParams.get('start') ?? '-1', 10);
-  const savedIdx = paramIdx >= 0 ? paramIdx : (id ? loadProgress(id) : 0);
-  const [idx, setIdx] = useState(() => Math.min(savedIdx, (set?.cards.length ?? 1) - 1));
+  // 시작 인덱스: URL ?start= > localStorage 저장값 > 0
+  const getStartIdx = () => {
+    const param = parseInt(searchParams.get('start') ?? '-1', 10);
+    if (param >= 0) return Math.min(param, (set?.cards.length ?? 1) - 1);
+    return loadProgress(id ?? '');
+  };
+
+  const [cards, setCards] = useState<CardSet['cards']>(() => set ? [...set.cards] : []);
+  const [idx, setIdx] = useState(() => {
+    const start = getStartIdx();
+    return Math.min(start, (set?.cards.length ?? 1) - 1);
+  });
   const [flipped, setFlipped] = useState(false);
-  const [done, setDone] = useState(0);
+  const [rated, setRated] = useState<Set<number>>(new Set()); // 평가한 인덱스
   const [answerWith, setAnswerWith] = useState<'definition' | 'term'>('definition');
   const [showSettings, setShowSettings] = useState(false);
 
+  // idx가 바뀔 때마다 localStorage에 저장
+  useEffect(() => {
+    if (id) saveProgress(id, idx);
+  }, [id, idx]);
+
   const handleShuffle = useCallback(() => {
     setCards(shuffleArray([...(set?.cards ?? [])]));
-    setIdx(0); setFlipped(false);
-  }, [set]);
+    setIdx(0);
+    setFlipped(false);
+    setRated(new Set());
+    if (id) saveProgress(id, 0);
+  }, [set, id]);
 
-  const go = (dir: 1 | -1) => {
-    setIdx(i => {
-      const next = Math.max(0, Math.min(cards.length - 1, i + dir));
-      if (id) saveProgress(id, next);
-      return next;
-    });
+  const go = (next: number) => {
+    const clamped = Math.max(0, Math.min(cards.length - 1, next));
+    setIdx(clamped);
     setFlipped(false);
   };
 
   const rate = async (correct: boolean) => {
     await onUpdateStat(cards[idx].id, correct);
-    setDone(d => d + 1);
-    if (idx < cards.length - 1) go(1);
+    setRated(prev => new Set([...prev, idx]));
+    if (idx < cards.length - 1) go(idx + 1);
+  };
+
+  const reset = () => {
+    setIdx(0);
+    setFlipped(false);
+    setCards([...(set?.cards ?? [])]);
+    setRated(new Set());
+    if (id) saveProgress(id, 0);
   };
 
   if (!set || cards.length === 0) {
@@ -77,7 +98,10 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
   const card = cards[idx];
   const front = answerWith === 'definition' ? card.term : card.definition;
   const back = answerWith === 'definition' ? card.definition : card.term;
-  const pct = Math.round((done / cards.length) * 100);
+
+  // 진행도: 현재 위치+1 / 전체 (이어보기 맥락에서 "여기까지 봤다")
+  const viewedPct = Math.round(((idx + 1) / cards.length) * 100);
+  const ratedPct = Math.round((rated.size / cards.length) * 100);
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -87,13 +111,13 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
           <ChevronLeft size={15} /> {set.title}
         </button>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(!showSettings)}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(s => !s)}>
             <Settings size={14} /> 설정
           </button>
           <button className="btn btn-secondary btn-sm" onClick={handleShuffle}>
             <Shuffle size={14} /> 섞기
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setIdx(0); setFlipped(false); setCards([...(set.cards)]); setDone(0); }}>
+          <button className="btn btn-secondary btn-sm" onClick={reset} title="처음부터">
             <RotateCcw size={14} />
           </button>
         </div>
@@ -103,12 +127,10 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
       {showSettings && (
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>설정</div>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>답 표시 방향</div>
-            <div className="tab-group">
-              <button className={`tab-btn ${answerWith === 'definition' ? 'active' : ''}`} onClick={() => setAnswerWith('definition')}>용어 → 정의</button>
-              <button className={`tab-btn ${answerWith === 'term' ? 'active' : ''}`} onClick={() => setAnswerWith('term')}>정의 → 용어</button>
-            </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>답 표시 방향</div>
+          <div className="tab-group">
+            <button className={`tab-btn ${answerWith === 'definition' ? 'active' : ''}`} onClick={() => setAnswerWith('definition')}>용어 → 정의</button>
+            <button className={`tab-btn ${answerWith === 'term' ? 'active' : ''}`} onClick={() => setAnswerWith('term')}>정의 → 용어</button>
           </div>
         </div>
       )}
@@ -116,11 +138,15 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
       {/* Progress */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-2)', marginBottom: 6 }}>
-          <span>{idx + 1} / {cards.length}</span>
-          <span>{done}개 평가됨</span>
+          <span style={{ fontWeight: 600 }}>{idx + 1} / {cards.length}</span>
+          <span>{rated.size > 0 ? `${rated.size}개 평가됨` : '카드를 뒤집어 평가해보세요'}</span>
         </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${((idx + 1) / cards.length) * 100}%` }} />
+        {/* 이중 진행바: 열람(파랑) + 평가(초록) */}
+        <div className="progress-track" style={{ height: 6, position: 'relative' }}>
+          <div className="progress-fill" style={{ width: `${viewedPct}%`, position: 'absolute', inset: 0 }} />
+          {rated.size > 0 && (
+            <div style={{ position: 'absolute', inset: 0, width: `${ratedPct}%`, background: 'var(--green)', borderRadius: 99, opacity: 0.8 }} />
+          )}
         </div>
       </div>
 
@@ -149,7 +175,7 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
 
       {/* Nav + rating */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <button className="btn btn-secondary btn-md" onClick={() => go(-1)} disabled={idx === 0}>
+        <button className="btn btn-secondary btn-md" onClick={() => go(idx - 1)} disabled={idx === 0}>
           <ChevronLeft size={16} />
         </button>
         {flipped ? (
@@ -164,16 +190,21 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         ) : (
           <div style={{ flex: 1, textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>카드를 클릭해 뒤집어보세요</div>
         )}
-        <button className="btn btn-secondary btn-md" onClick={() => go(1)} disabled={idx === cards.length - 1}>
+        <button className="btn btn-secondary btn-md" onClick={() => go(idx + 1)} disabled={idx === cards.length - 1}>
           <ChevronRight size={16} />
         </button>
       </div>
 
-      {done > 0 && (
-        <div style={{ marginTop: 24, padding: 16, background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>세션 진행률</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--blue)', marginBottom: 8 }}>{pct}%</div>
-          <div className="progress-track"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+      {/* 마지막 카드 도달 시 */}
+      {idx === cards.length - 1 && (
+        <div style={{ marginTop: 24, padding: 20, background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>🎉 마지막 카드입니다</div>
+          <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14 }}>
+            {rated.size}개 평가 · {cards.length - rated.size}개 미평가
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={reset} style={{ gap: 4 }}>
+            <RotateCcw size={13} /> 처음부터 다시
+          </button>
         </div>
       )}
     </div>

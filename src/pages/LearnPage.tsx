@@ -13,6 +13,14 @@ function loadLearnConfig(setId: string): any | null {
   try { const v = localStorage.getItem(`qf-learncfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
+// 학습하기 진행도 저장/불러오기 (홈 진행도용)
+export function saveLearnProgress(setId: string, mastered: number, total: number) {
+  try { localStorage.setItem(`qf-learnprog-${setId}`, JSON.stringify({ mastered, total })); } catch {}
+}
+export function loadLearnProgress(setId: string): { mastered: number; total: number } | null {
+  try { const v = localStorage.getItem(`qf-learnprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+
 interface LearnPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
@@ -106,6 +114,16 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       };
     });
   };
+
+  // masteredSet 또는 flashIdx가 변할 때마다 진행도 저장
+  useEffect(() => {
+    if (id && sortedCards.length > 0) {
+      // 플래시카드 단계: flashIdx / total, 연습 단계: mastered / total 기준으로 저장
+      const progressMastered = screen === 'flash' ? flashIdx : masteredSet.size;
+      saveLearnProgress(id, progressMastered, sortedCards.length);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, masteredSet, flashIdx, sortedCards.length]);
 
   // resume=1 이면 설정 화면 건너뛰고 바로 시작
   useEffect(() => {
