@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw, X } from 'lucide-react';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import { loadProgress, loadLastMode, loadCompleted } from './FlashcardPage';
 import { loadTestProgress, loadTestCompleted } from './TestPage';
@@ -147,6 +147,7 @@ type SessionMap = Record<string, Record<string, SessionInfo>>;
 export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingMode, setPendingMode] = useState<'flashcard' | 'learn' | 'test' | 'match' | null>(null);
   const streak = loadStreak();
 
   // Supabase 세션 데이터 (비동기 로드)
@@ -390,13 +391,18 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
         <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-2)', marginBottom: 14 }}>여기서 시작하기</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
           {[
-            { icon: Zap, label: '낱말카드', sub: '플래시카드', color: 'var(--blue)', bg: 'var(--blue-bg)', path: cardSets[0] ? `/flashcard/${cardSets[0].id}` : '/library' },
-            { icon: Brain, label: '학습하기', sub: '적응형 학습', color: 'var(--purple)', bg: 'var(--purple-bg)', path: cardSets[0] ? `/learn/${cardSets[0].id}` : '/library' },
-            { icon: PenLine, label: '테스트', sub: '실력 점검', color: 'var(--green)', bg: 'var(--green-bg)', path: cardSets[0] ? `/test/${cardSets[0].id}` : '/library' },
-            { icon: Shuffle, label: '카드 맞추기', sub: '매칭 게임', color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: cardSets[0] ? `/match/${cardSets[0].id}` : '/library' },
-            { icon: Plus, label: '새 세트', sub: '직접 만들기', color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: '/create' },
-          ].map(({ icon: Icon, label, sub, color, bg, path }) => (
-            <div key={label} className="mode-btn" onClick={() => navigate(path)} style={{ cursor: 'pointer', padding: 16 }}>
+            { icon: Zap, label: '낱말카드', sub: '플래시카드', color: 'var(--blue)', bg: 'var(--blue-bg)', mode: 'flashcard' as const },
+            { icon: Brain, label: '학습하기', sub: '적응형 학습', color: 'var(--purple)', bg: 'var(--purple-bg)', mode: 'learn' as const },
+            { icon: PenLine, label: '테스트', sub: '실력 점검', color: 'var(--green)', bg: 'var(--green-bg)', mode: 'test' as const },
+            { icon: Shuffle, label: '카드 맞추기', sub: '매칭 게임', color: 'var(--yellow)', bg: 'var(--yellow-bg)', mode: 'match' as const },
+            { icon: Plus, label: '새 세트', sub: '직접 만들기', color: '#f0883e', bg: 'rgba(240,136,62,.15)', mode: null as null },
+          ].map(({ icon: Icon, label, sub, color, bg, mode }) => (
+            <div key={label} className="mode-btn" onClick={() => {
+              if (mode === null) { navigate('/create'); return; }
+              if (cardSets.length === 0) { navigate('/library'); return; }
+              if (cardSets.length === 1) { navigate(MODE_META[mode].path(cardSets[0].id)); return; }
+              setPendingMode(mode);
+            }} style={{ cursor: 'pointer', padding: 16 }}>
               <div className="mode-icon" style={{ background: bg, width: 36, height: 36, borderRadius: 10 }}>
                 <Icon size={16} color={color} />
               </div>
@@ -447,5 +453,37 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
       </section>
 
     </div>
+
+    {/* ── 세트 선택 모달 ── */}
+    {pendingMode && (
+      <div className="modal-overlay" onClick={() => setPendingMode(null)}>
+        <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>세트 선택</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                {MODE_META[pendingMode].label}으로 학습할 세트를 선택하세요
+              </p>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPendingMode(null)} style={{ padding: 6 }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className="modal-body" style={{ padding: '12px 16px', maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {cardSets.map(set => (
+              <button
+                key={set.id}
+                className="btn btn-secondary btn-md"
+                style={{ justifyContent: 'space-between', textAlign: 'left', padding: '12px 16px', width: '100%' }}
+                onClick={() => { navigate(MODE_META[pendingMode!].path(set.id)); setPendingMode(null); }}
+              >
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{set.title}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-2)', flexShrink: 0, marginLeft: 12 }}>{set.cards.length}개</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
   );
 }
