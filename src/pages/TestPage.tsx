@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
-import { upsertSession, loadSession } from '../hooks/useStudySync';
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 // ── localStorage 헬퍼 (빠른 읽기 / 오프라인 fallback) ──
@@ -110,8 +109,7 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
         const qs = buildQuestions(set, cfg);
         const newSession = { questions: qs, qIdx: 0, score: 0, answers: [] };
         saveTestSession(id, newSession);
-        if (userId) upsertSession(userId, id, 'test', { idx: 0, total: qs.length, session: newSession }, false);
-        setQuestions(qs);
+          setQuestions(qs);
         setQIdx(0);
         setScore(0);
         setAnswers([]);
@@ -123,20 +121,7 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
       }
     };
 
-    if (userId) {
-      loadSession(userId, id, 'test').then(cloudSession => {
-        let session: TestSession | null = null;
-        if (cloudSession && !cloudSession.completed && cloudSession.progress.session) {
-          session = cloudSession.progress.session as TestSession;
-          if (id) saveTestSession(id, session); // localStorage 동기화
-        } else {
-          session = loadTestSession(id);
-        }
-        applySession(session);
-      });
-    } else {
-      applySession(loadTestSession(id));
-    }
+    applySession(loadTestSession(id));
   }, [resume, id, set, userId]);
 
   // ── 키보드 단축키 ──
@@ -177,9 +162,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // ── Supabase 저장 debounce timer ──
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const startQuiz = useCallback(() => {
     if (!set) return;
     if (id) { saveTestConfig(id, config); clearTestSession(id); }
@@ -189,7 +171,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
       saveTestSession(id, session);
       saveTestProgress(id, 0, qs.length);
       saveTestCompleted(id, false);
-      if (userId) upsertSession(userId, id, 'test', { idx: 0, total: qs.length, session }, false);
     }
     setQuestions(qs);
     setQIdx(0);
@@ -216,7 +197,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
     if (id) {
       saveTestCompleted(id, false);
       clearTestSession(id);
-      if (userId) upsertSession(userId, id, 'test', { idx: 0, total: 0, session: null }, false);
     }
   }, [id, userId]);
 
@@ -243,12 +223,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
       saveTestProgress(id, newIdx, qs.length);
       saveTestSession(id, session);
 
-      if (userId) {
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => {
-          upsertSession(userId, id, 'test', { idx: newIdx, total: qs.length, session }, false);
-        }, 500);
-      }
     }
   }, [id, onUpdateStat, userId]);
 
@@ -261,7 +235,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
         saveTestProgress(id, qs.length, qs.length);
         saveTestCompleted(id, true);
         clearTestSession(id);
-        if (userId) upsertSession(userId, id, 'test', { idx: qs.length, total: qs.length, session: null }, true);
       }
       return;
     }
