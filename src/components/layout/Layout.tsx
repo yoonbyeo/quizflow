@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Menu, Sun, Moon } from 'lucide-react';
+import { Search, Plus, Sun, Moon, Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
@@ -13,11 +13,27 @@ interface LayoutProps {
   children: ReactNode;
 }
 
+const SIDEBAR_FULL = 220;
+const SIDEBAR_COLLAPSED = 56;
+
 export default function Layout({ user, cardSets, folders, children }: LayoutProps) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('qf-sidebar-collapsed') === 'true'; } catch { return false; }
+  });
   const { theme, toggleTheme } = useTheme();
+
+  const sidebarWidth = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_FULL;
+
+  const handleToggleCollapse = () => {
+    setCollapsed(c => {
+      const next = !c;
+      try { localStorage.setItem('qf-sidebar-collapsed', String(next)); } catch {}
+      return next;
+    });
+  };
 
   const filtered = search.trim()
     ? cardSets.filter(s =>
@@ -29,11 +45,32 @@ export default function Layout({ user, cardSets, folders, children }: LayoutProp
 
   return (
     <div>
-      <Sidebar user={user} cardSets={cardSets} folders={folders} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
-      <div className="main-content">
-        <header className="topbar">
-          <button onClick={() => setMobileOpen(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', display: 'flex', padding: 6, borderRadius: 8 }}>
+      <Sidebar
+        user={user}
+        cardSets={cardSets}
+        folders={folders}
+        collapsed={collapsed}
+        onToggleCollapse={handleToggleCollapse}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+      />
+
+      <div
+        style={{
+          marginLeft: sidebarWidth,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'margin-left .22s cubic-bezier(.4,0,.2,1)',
+        }}
+        className="main-content-inner"
+      >
+        <header className="topbar" style={{ paddingLeft: 20, paddingRight: 20 }}>
+          {/* 모바일 햄버거 버튼 */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="mobile-menu-btn"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', display: 'none', padding: 6, borderRadius: 8, marginRight: 4 }}>
             <Menu size={20} />
           </button>
 
@@ -70,6 +107,7 @@ export default function Layout({ user, cardSets, folders, children }: LayoutProp
             </button>
           </div>
         </header>
+
         <main className="page-body">{children}</main>
       </div>
     </div>
