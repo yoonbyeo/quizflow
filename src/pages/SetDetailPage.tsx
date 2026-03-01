@@ -81,6 +81,24 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
 
   const [blurTerms, setBlurTerms] = useState(false);
   const [blurDefs, setBlurDefs] = useState(false);
+  // 개별 카드 블러 해제 추적 (card.id → true면 해당 카드만 보임)
+  const [revealedTerms, setRevealedTerms] = useState<Set<string>>(new Set());
+  const [revealedDefs, setRevealedDefs] = useState<Set<string>>(new Set());
+
+  const toggleRevealTerm = (cardId: string) => {
+    setRevealedTerms(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId); else next.add(cardId);
+      return next;
+    });
+  };
+  const toggleRevealDef = (cardId: string) => {
+    setRevealedDefs(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId); else next.add(cardId);
+      return next;
+    });
+  };
 
   if (!set) {
     return (
@@ -184,7 +202,7 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* 블러 토글 */}
           <button
-            onClick={() => setBlurTerms(b => !b)}
+            onClick={() => { setBlurTerms(b => !b); setRevealedTerms(new Set()); }}
             className={`btn btn-sm ${blurTerms ? 'btn-primary' : 'btn-secondary'}`}
             style={{ gap: 5, fontSize: 12 }}
           >
@@ -192,7 +210,7 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
             용어 {blurTerms ? '숨김' : '표시'}
           </button>
           <button
-            onClick={() => setBlurDefs(b => !b)}
+            onClick={() => { setBlurDefs(b => !b); setRevealedDefs(new Set()); }}
             className={`btn btn-sm ${blurDefs ? 'btn-primary' : 'btn-secondary'}`}
             style={{ gap: 5, fontSize: 12 }}
           >
@@ -211,6 +229,8 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {set.cards.map((card, i) => {
           const cardStat = set.studyStats?.cardStats?.[card.id] as CardStat | undefined;
+          const termBlurred = blurTerms && !revealedTerms.has(card.id);
+          const defBlurred = blurDefs && !revealedDefs.has(card.id);
           return (
             <div key={card.id} className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'stretch', gap: 0 }}>
               {/* 번호 */}
@@ -218,44 +238,46 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
                 {i + 1}
               </div>
 
-              {/* 용어 */}
-              <div style={{ flex: 1, padding: '2px 16px 2px 8px', borderRight: '1px solid var(--border)' }}>
+              {/* 용어 - 고정 50% 너비 */}
+              <div style={{ width: 0, flex: '0 0 calc(50% - 32px)', padding: '2px 16px 2px 8px', borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>용어</div>
                 <div
                   style={{
                     fontSize: 14, fontWeight: 600,
-                    filter: blurTerms ? 'blur(6px)' : 'none',
+                    filter: termBlurred ? 'blur(6px)' : 'none',
                     transition: 'filter .2s',
                     cursor: blurTerms ? 'pointer' : 'default',
-                    userSelect: blurTerms ? 'none' : 'auto',
+                    userSelect: termBlurred ? 'none' : 'auto',
                   }}
-                  onClick={() => blurTerms && setBlurTerms(false)}
+                  onClick={() => blurTerms && toggleRevealTerm(card.id)}
+                  title={blurTerms ? (termBlurred ? '클릭하여 보기' : '클릭하여 숨기기') : undefined}
                 >
                   {card.term}
                 </div>
                 {card.imageUrl && (
-                  blurTerms
+                  termBlurred
                     ? <img src={card.imageUrl} style={{ marginTop: 6, maxWidth: 100, borderRadius: 6, border: '1px solid var(--border)', filter: 'blur(6px)', transition: 'filter .2s' }} />
                     : <ImageZoom src={card.imageUrl} style={{ marginTop: 6, maxWidth: 100, borderRadius: 6, border: '1px solid var(--border)', display: 'block' }} />
                 )}
               </div>
 
-              {/* 정의 */}
-              <div style={{ flex: 1, padding: '2px 8px 2px 16px' }}>
+              {/* 정의 - 고정 50% 너비 */}
+              <div style={{ width: 0, flex: '0 0 calc(50% - 16px)', padding: '2px 8px 2px 16px', overflow: 'hidden' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>정의</div>
                 <div
                   style={{
                     fontSize: 14, color: 'var(--text-2)',
-                    filter: blurDefs ? 'blur(6px)' : 'none',
+                    filter: defBlurred ? 'blur(6px)' : 'none',
                     transition: 'filter .2s',
                     cursor: blurDefs ? 'pointer' : 'default',
-                    userSelect: blurDefs ? 'none' : 'auto',
+                    userSelect: defBlurred ? 'none' : 'auto',
                   }}
-                  onClick={() => blurDefs && setBlurDefs(false)}
+                  onClick={() => blurDefs && toggleRevealDef(card.id)}
+                  title={blurDefs ? (defBlurred ? '클릭하여 보기' : '클릭하여 숨기기') : undefined}
                 >
                   {card.definition}
                 </div>
-                {card.hint && !blurDefs && (
+                {card.hint && !defBlurred && (
                   <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>힌트: {card.hint}</div>
                 )}
               </div>

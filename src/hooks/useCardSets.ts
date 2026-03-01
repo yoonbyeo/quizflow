@@ -211,18 +211,23 @@ export function useCardSets(userId: string | undefined) {
     const existing = cardSets.find((s) => s.id === setId)?.cards ?? [];
     const existingIds = new Set(existing.map((c) => c.id));
 
-    const toInsert = cards
-      .filter((c) => c.isNew || !c.id || !existingIds.has(c.id))
-      .filter((c) => c.term.trim() && c.definition.trim())
-      .map((c, i) => ({ set_id: setId, term: c.term, definition: c.definition, hint: c.hint, image_url: c.imageUrl ?? null, position: i }));
+    // 전체 cards 배열에서 실제 position 계산 (카드 순서 보존)
+    const validCards = cards.filter((c) => c.term.trim() && c.definition.trim());
 
-    const toUpdate = cards
-      .filter((c) => c.id && existingIds.has(c.id) && !c.isNew)
-      .filter((c) => c.term.trim() && c.definition.trim());
+    const toInsert = validCards
+      .filter((c) => c.isNew || !c.id || !existingIds.has(c.id))
+      .map((c) => {
+        const globalPos = validCards.indexOf(c);
+        return { set_id: setId, term: c.term, definition: c.definition, hint: c.hint, image_url: c.imageUrl ?? null, position: globalPos };
+      });
+
+    const toUpdate = validCards
+      .filter((c) => c.id && existingIds.has(c.id) && !c.isNew);
 
     if (toInsert.length > 0) await supabase.from('cards').insert(toInsert);
     for (const card of toUpdate) {
-      await supabase.from('cards').update({ term: card.term, definition: card.definition, hint: card.hint, image_url: card.imageUrl ?? null }).eq('id', card.id!);
+      const globalPos = validCards.indexOf(card);
+      await supabase.from('cards').update({ term: card.term, definition: card.definition, hint: card.hint, image_url: card.imageUrl ?? null, position: globalPos }).eq('id', card.id!);
     }
 
     const updatedIds = new Set(toUpdate.map((c) => c.id));

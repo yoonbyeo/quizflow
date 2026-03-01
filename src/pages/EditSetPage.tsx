@@ -204,6 +204,25 @@ export default function EditSetPage({ cardSets, folders, onUpdateSet, onSaveCard
           <FileUp size={15} /> CSV 가져오기
         </button>
       </div>
+
+      {/* 하단 고정 저장 바 */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+        background: 'var(--bg-1)', borderTop: '1px solid var(--border)',
+        padding: '12px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10,
+        backdropFilter: 'blur(8px)',
+      }}>
+        <button className="btn btn-ghost btn-md" onClick={() => navigate(-1)}>취소</button>
+        <button className="btn btn-primary btn-md" onClick={handleSave} disabled={loading}
+          style={{ minWidth: 100 }}>
+          {loading
+            ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
+            : <Save size={15} />}
+          저장하기
+        </button>
+      </div>
+      {/* 하단 바 높이만큼 여백 */}
+      <div style={{ height: 72 }} />
     </div>
   );
 }

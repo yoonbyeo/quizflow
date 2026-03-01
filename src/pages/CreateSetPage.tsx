@@ -200,25 +200,35 @@ export default function CreateSetPage({ onCreate, folders, onUploadImage }: Crea
 
         {csvInfo && <div className="alert alert-success" style={{ marginBottom: 12, fontSize: 13 }}>{csvInfo}</div>}
 
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn btn-secondary btn-md" onClick={addCard}>
-              <Plus size={15} /> 카드 추가
-            </button>
-            <input type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} ref={csvRef}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvImport(f); e.target.value = ''; }} />
-            <button type="button" className="btn btn-secondary btn-md" onClick={() => csvRef.current?.click()}
-              title="CSV 파일에서 카드 가져오기 (용어,정의,힌트 형식)">
-              <FileUp size={15} /> CSV 가져오기
-            </button>
-          </div>
-          <button type="submit" className="btn btn-primary btn-md" disabled={loading}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn btn-secondary btn-md" onClick={addCard}>
+            <Plus size={15} /> 카드 추가
+          </button>
+          <input type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} ref={csvRef}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvImport(f); e.target.value = ''; }} />
+          <button type="button" className="btn btn-secondary btn-md" onClick={() => csvRef.current?.click()}
+            title="CSV 파일에서 카드 가져오기 (용어,정의,힌트 형식)">
+            <FileUp size={15} /> CSV 가져오기
+          </button>
+        </div>
+
+        {/* 하단 고정 저장 바 */}
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          background: 'var(--bg-1)', borderTop: '1px solid var(--border)',
+          padding: '12px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10,
+          backdropFilter: 'blur(8px)',
+        }}>
+          <button type="button" className="btn btn-ghost btn-md" onClick={() => navigate(-1)}>취소</button>
+          <button type="submit" className="btn btn-primary btn-md" disabled={loading} style={{ minWidth: 100 }}>
             {loading
               ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
               : <Zap size={15} />}
             세트 저장
           </button>
         </div>
+        {/* 하단 바 높이만큼 여백 */}
+        <div style={{ height: 72 }} />
       </form>
     </div>
   );
