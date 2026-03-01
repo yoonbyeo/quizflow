@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, LogIn, Copy, Check, Crown, BookOpen, X, ChevronRight } from 'lucide-react';
+import { Users, Plus, LogIn, Copy, Check, Crown, BookOpen, X, ChevronRight, RefreshCw } from 'lucide-react';
 import { useStudyRooms } from '../hooks/useStudyRooms';
 import type { User } from '@supabase/supabase-js';
 
 interface StudyRoomsPageProps {
   user: User | null;
+}
+
+function randomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export default function StudyRoomsPage({ user }: StudyRoomsPageProps) {
@@ -16,22 +21,32 @@ export default function StudyRoomsPage({ user }: StudyRoomsPageProps) {
   const [showJoin, setShowJoin] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newCode, setNewCode] = useState(() => randomCode());
+  const [useCustomCode, setUseCustomCode] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const resetCreateForm = () => {
+    setNewName(''); setNewDesc('');
+    setNewCode(randomCode()); setUseCustomCode(false);
+    setError('');
+  };
+
   const handleCreate = async () => {
     if (!newName.trim()) { setError('방 이름을 입력하세요.'); return; }
+    const codeToUse = useCustomCode ? newCode.trim() : undefined;
+    if (useCustomCode && newCode.trim().length < 4) { setError('코드는 4자리 이상 입력하세요.'); return; }
     setCreating(true); setError('');
-    const room = await createRoom(newName.trim(), newDesc.trim() || undefined);
+    const { room, error: err } = await createRoom(newName.trim(), newDesc.trim() || undefined, codeToUse);
     setCreating(false);
     if (room) {
-      setShowCreate(false); setNewName(''); setNewDesc('');
+      setShowCreate(false); resetCreateForm();
       navigate(`/rooms/${room.id}`);
     } else {
-      setError('방 만들기에 실패했습니다.');
+      setError(err ?? '방 만들기에 실패했습니다.');
     }
   };
 
@@ -85,25 +100,70 @@ export default function StudyRoomsPage({ user }: StudyRoomsPageProps) {
         <div className="card card-glow" style={{ padding: '22px 24px', marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ fontSize: 15, fontWeight: 700 }}>새 스터디룸 만들기</h2>
-            <button onClick={() => { setShowCreate(false); setError(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>
+            <button onClick={() => { setShowCreate(false); resetCreateForm(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>
               <X size={16} />
             </button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* 방 이름 */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>방 이름 *</label>
-              <input type="text" className="input" placeholder="예: 토익 900점 스터디" value={newName} onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreate()} />
+              <input type="text" className="input" placeholder="예: 토익 900점 스터디" value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                autoFocus />
             </div>
+
+            {/* 설명 */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>설명 (선택)</label>
               <input type="text" className="input" placeholder="이 방에 대한 간단한 설명" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
             </div>
+
+            {/* 초대 코드 */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>초대 코드</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={useCustomCode} onChange={e => setUseCustomCode(e.target.checked)}
+                    style={{ accentColor: 'var(--blue)', width: 14, height: 14 }} />
+                  직접 설정
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="input"
+                  value={newCode}
+                  onChange={e => setNewCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                  disabled={!useCustomCode}
+                  maxLength={8}
+                  style={{
+                    fontFamily: 'monospace', fontSize: 20, letterSpacing: '0.25em', textAlign: 'center',
+                    fontWeight: 800, color: 'var(--blue)',
+                    opacity: useCustomCode ? 1 : 0.5,
+                  }}
+                />
+                {!useCustomCode && (
+                  <button type="button" onClick={() => setNewCode(randomCode())} title="코드 다시 생성"
+                    className="btn btn-secondary btn-sm" style={{ flexShrink: 0, padding: '0 10px', height: 38 }}>
+                    <RefreshCw size={14} />
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5 }}>
+                {useCustomCode ? '4~8자리 영문/숫자로 직접 설정할 수 있습니다.' : '🔀 버튼으로 코드를 새로 생성하거나, "직접 설정"을 체크해 원하는 코드를 입력하세요.'}
+              </p>
+            </div>
+
             {error && <div className="alert alert-error" style={{ fontSize: 13 }}>{error}</div>}
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost btn-md" onClick={() => { setShowCreate(false); setError(''); }}>취소</button>
-              <button className="btn btn-primary btn-md" onClick={handleCreate} disabled={creating}>
-                {creating ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} /> : <Plus size={15} />}
+              <button className="btn btn-ghost btn-md" onClick={() => { setShowCreate(false); resetCreateForm(); }}>취소</button>
+              <button className="btn btn-primary btn-md" onClick={handleCreate} disabled={creating || !newName.trim()}>
+                {creating
+                  ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin .6s linear infinite' }} />
+                  : <Plus size={15} />}
                 만들기
               </button>
             </div>

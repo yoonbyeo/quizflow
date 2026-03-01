@@ -96,30 +96,58 @@ export function useStudyRooms(userId: string | undefined) {
 
   useEffect(() => { fetchMyRooms(); }, [fetchMyRooms]);
 
-  // 방 만들기
-  const createRoom = useCallback(async (name: string, description?: string): Promise<StudyRoom | null> => {
-    if (!userId) return null;
-    let code = generateCode();
-    // 코드 중복 방지
-    for (let i = 0; i < 5; i++) {
-      const { data } = await supabase.from('study_rooms').select('id').eq('code', code).maybeSingle();
-      if (!data) break;
-      code = generateCode();
+  // 방 만들기 (customCode: 사용자가 직접 지정한 코드, 없으면 자동 생성)
+  const createRoom = useCallback(async (
+    name: string,
+    description?: string,
+    customCode?: string,
+  ): Promise<{ room: StudyRoom | null; error?: string }> => {
+    if (!userId) return { room: null, error: '로그인이 필요합니다.' };
+
+    let code = customCode ? customCode.toUpperCase().trim() : generateCode();
+
+    // 코드 형식 검사 (6자리 영숫자)
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) {
+      return { room: null, error: '코드는 4~8자리 영문/숫자만 사용할 수 있습니다.' };
     }
+
+    // 코드 중복 확인
+    const { data: existing } = await supabase
+      .from('study_rooms').select('id').eq('code', code).maybeSingle();
+    if (existing) {
+      if (customCode) return { room: null, error: '이미 사용 중인 코드입니다. 다른 코드를 입력해주세요.' };
+      // 자동 생성인 경우 재시도
+      for (let i = 0; i < 5; i++) {
+        code = generateCode();
+        const { data: dup } = await supabase.from('study_rooms').select('id').eq('code', code).maybeSingle();
+        if (!dup) break;
+      }
+    }
+
     const { data: room, error } = await supabase
       .from('study_rooms')
       .insert({ code, name, description: description || null, host_id: userId, max_members: 8 })
       .select()
       .single();
-    if (error || !room) return null;
+
+    if (error || !room) {
+      return { room: null, error: `방 생성 실패: ${error?.message ?? '알 수 없는 오류'}` };
+    }
 
     // 방장도 멤버로 추가
-    await supabase.from('room_members').insert({ room_id: room.id, user_id: userId });
+    const { error: memberError } = await supabase
+      .from('room_members').insert({ room_id: room.id, user_id: userId });
+    if (memberError) {
+      return { room: null, error: `멤버 등록 실패: ${memberError.message}` };
+    }
+
     await fetchMyRooms();
     return {
-      id: room.id, code: room.code, name: room.name, description: room.description ?? undefined,
-      hostId: room.host_id, maxMembers: room.max_members, memberCount: 1,
-      isActive: true, createdAt: new Date(room.created_at).getTime(), isHost: true, isMember: true,
+      room: {
+        id: room.id, code: room.code, name: room.name, description: room.description ?? undefined,
+        hostId: room.host_id, maxMembers: room.max_members, memberCount: 1,
+        isActive: true, createdAt: new Date(room.created_at).getTime(), isHost: true, isMember: true,
+      },
     };
   }, [userId, fetchMyRooms]);
 
