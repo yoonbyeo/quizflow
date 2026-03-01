@@ -169,9 +169,23 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {inProgress.map(set => {
-              const stats = Object.values(set.studyStats?.cardStats ?? {}) as CardStat[];
-              const mastered = stats.filter(c => c.difficulty === 'easy').length;
-              const pct = set.cards.length > 0 ? Math.round((mastered / set.cards.length) * 100) : 0;
+              const cardStatMap = set.studyStats?.cardStats ?? {};
+              const total = set.cards.length;
+
+              // 한 번이라도 학습한 카드 수 (진행도)
+              const studied = set.cards.filter(c => cardStatMap[c.id]).length;
+              // 숙달 카드 수 (easy)
+              const mastered = Object.values(cardStatMap).filter((s: any) => s.difficulty === 'easy').length;
+
+              // 플래시카드 진행 인덱스 (localStorage)
+              const savedIdx = loadProgress(set.id);
+              // savedIdx+1 vs studied 중 큰 값을 진행 카드 수로 사용
+              const progressCards = Math.max(studied, Math.min(savedIdx + 1, total));
+              const pct = total > 0 ? Math.round((progressCards / total) * 100) : 0;
+
+              // 계속하기 시작 위치: 마지막 카드까지 봤으면 처음부터
+              const startIdx = savedIdx >= total - 1 ? 0 : savedIdx;
+
               return (
                 <div key={set.id} className="card" style={{ padding: '20px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 20 }}
                   onClick={() => navigate(`/set/${set.id}`)}>
@@ -180,19 +194,32 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{set.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>{pct}% 완료 · {set.cards.length}개 카드</div>
-                    <div className="progress-track">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        {progressCards}/{total}개 학습
+                      </span>
+                      {mastered > 0 && (
+                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>
+                          ✓ {mastered}개 숙달
+                        </span>
+                      )}
+                    </div>
+                    {/* 이중 레이어 진행바: 학습(파랑) 위에 숙달(초록) */}
+                    <div className="progress-track" style={{ position: 'relative' }}>
                       <div className="progress-fill" style={{ width: `${pct}%` }} />
+                      {mastered > 0 && (
+                        <div style={{
+                          position: 'absolute', top: 0, left: 0, height: '100%',
+                          width: `${Math.round((mastered / total) * 100)}%`,
+                          background: 'var(--green)', borderRadius: 99, opacity: 0.8,
+                        }} />
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     <button className="btn btn-primary btn-sm"
                       onClick={e => {
                         e.stopPropagation();
-                        const savedIdx = loadProgress(set.id);
-                        const total = set.cards.length;
-                        // 마지막 카드까지 갔으면 처음부터
-                        const startIdx = savedIdx >= total - 1 ? 0 : savedIdx;
                         navigate(`/flashcard/${set.id}?start=${startIdx}`);
                       }}>
                       계속하기
