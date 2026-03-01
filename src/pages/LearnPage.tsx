@@ -1,10 +1,17 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Brain, AlertCircle } from 'lucide-react';
 import { generateMultipleChoiceQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
 import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet, CardStat, TestQuestion } from '../types';
+
+function saveLearnConfig(setId: string, cfg: any) {
+  try { localStorage.setItem(`qf-learncfg-${setId}`, JSON.stringify(cfg)); } catch {}
+}
+function loadLearnConfig(setId: string): any | null {
+  try { const v = localStorage.getItem(`qf-learncfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
 
 interface LearnPageProps {
   cardSets: CardSet[];
@@ -28,14 +35,15 @@ interface PracticeItem {
 export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
+  const resume = searchParams.get('resume') === '1';
 
   if (id) saveLastMode(id, 'learn');
 
-  const [config, setConfig] = useState<LearnConfig>({
-    includeFlashcard: true,
-    includeMultipleChoice: true,
-    includeWritten: true,
+  const [config, setConfig] = useState<LearnConfig>(() => {
+    if (id) { const saved = loadLearnConfig(id); if (saved) return saved; }
+    return { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
   });
   const [screen, setScreen] = useState<Screen>('config');
   const [sortedCards, setSortedCards] = useState<CardSet['cards']>([]);
@@ -99,7 +107,53 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     });
   };
 
+  // resume=1 이면 설정 화면 건너뛰고 바로 시작
+  useEffect(() => {
+    if (resume && set && set.cards.length > 0) {
+      const cfg = (id ? loadLearnConfig(id) : null) ??
+        { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
+      setConfig(cfg);
+      // startLearn 로직 인라인으로 실행
+      const priority = (c: CardStat | undefined) => {
+        if (!c || c.difficulty === 'unrated') return 0;
+        if (c.difficulty === 'hard') return 1;
+        if (c.difficulty === 'medium') return 2;
+        return 3;
+      };
+      const cards = shuffleArray([...set.cards]).sort((a, b) =>
+        priority(set.studyStats?.cardStats?.[a.id] as CardStat | undefined) -
+        priority(set.studyStats?.cardStats?.[b.id] as CardStat | undefined)
+      );
+      setSortedCards(cards);
+      setFlashResults([]); setFlashScore(0); setPracticeScore(0);
+      setFlipped(false); setFlashIdx(0); setSubmitted(false);
+      setSelected(null); setWritten(''); setMasteredSet(new Set());
+      if (cfg.includeFlashcard) {
+        setScreen('flash');
+      } else {
+        const items = cards.map((card: CardSet['cards'][0], i: number) => {
+          const canMC = cfg.includeMultipleChoice && set.cards.length >= 4;
+          const canW = cfg.includeWritten;
+          let type: 'mc' | 'written' = 'written';
+          if (canMC && canW) type = i % 2 === 0 ? 'mc' : 'written';
+          else if (canMC) type = 'mc';
+          setPracticeItems(items);
+          setPracticeQueue(items.map((_: any, i: number) => i));
+          setQueuePos(0);
+          setScreen('practice');
+          return { card, type, mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null };
+        });
+        setPracticeItems(items);
+        setPracticeQueue(items.map((_: any, i: number) => i));
+        setQueuePos(0);
+        setScreen('practice');
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startLearn = () => {
+    if (id) saveLearnConfig(id, config);
     const cards = buildSorted();
     setSortedCards(cards);
     setFlashResults([]);

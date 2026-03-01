@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { loadProgress, loadLastMode } from './FlashcardPage';
+import { loadProgress, loadLastMode } from './FlashcardPage'; // loadProgress: 플래시카드 이어보기 인덱스
 import type { CardSet, CardStat, Folder } from '../types';
 
 // 모드 → 경로/라벨/색상 매핑
@@ -181,20 +181,20 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
               const cardStatMap = set.studyStats?.cardStats ?? {};
               const total = set.cards.length;
 
-              // 학습 통계
+              // 학습 통계 — 실제 Supabase 기록 기준
               const studied = set.cards.filter(c => cardStatMap[c.id]).length;
               const mastered = (Object.values(cardStatMap) as any[]).filter(s => s.difficulty === 'easy').length;
-              const savedIdx = loadProgress(set.id);
-              const progressCards = Math.max(studied, Math.min(savedIdx + 1, total));
-              const pct = total > 0 ? Math.round((progressCards / total) * 100) : 0;
+              const pct = total > 0 ? Math.round((studied / total) * 100) : 0;
               const masteredPct = total > 0 ? Math.round((mastered / total) * 100) : 0;
 
               // 마지막 학습 모드
               const lastMode = loadLastMode(set.id) ?? 'flashcard';
               const meta = MODE_META[lastMode];
+              // 플래시카드는 savedIdx에서 이어서, 나머지는 ?resume=1로 바로 시작
+              const savedIdx = loadProgress(set.id);
               const continuePath = lastMode === 'flashcard'
                 ? `${meta.path(set.id)}?start=${savedIdx >= total - 1 ? 0 : savedIdx}`
-                : meta.path(set.id);
+                : `${meta.path(set.id)}?resume=1`;
 
               return (
                 <div key={set.id} className="card card-hover"
@@ -231,7 +231,7 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
                   {/* 진행 텍스트 */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>
-                      {pct}% 완료 · {progressCards}/{total}개 학습
+                      {pct}% 완료 · {studied}/{total}개 학습
                     </span>
                     {mastered > 0 && (
                       <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>

@@ -1,8 +1,16 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
+
+// 테스트 설정 저장/불러오기
+function saveTestConfig(setId: string, cfg: any) {
+  try { localStorage.setItem(`qf-testcfg-${setId}`, JSON.stringify(cfg)); } catch {}
+}
+function loadTestConfig(setId: string): any | null {
+  try { const v = localStorage.getItem(`qf-testcfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
 interface TestPageProps {
@@ -32,11 +40,16 @@ function buildQuestions(set: { cards: CardSet['cards'] }, config: TestConfig): T
 export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
+  const resume = searchParams.get('resume') === '1';
 
   if (id) saveLastMode(id, 'test');
 
-  const [config, setConfig] = useState<TestConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<TestConfig>(() => {
+    if (id) { const saved = loadTestConfig(id); if (saved) return saved; }
+    return DEFAULT_CONFIG;
+  });
   const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');
   const [questions, setQuestions] = useState<TestQuestion[]>([]);
 
@@ -49,6 +62,23 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   const [answers, setAnswers] = useState<{ q: string; correct: string; user: string; ok: boolean }[]>([]);
   const [showReview, setShowReview] = useState(false);
 
+  // resume=1 이면 설정 화면 건너뛰고 바로 시작
+  useEffect(() => {
+    if (resume && set && set.cards.length >= 2) {
+      const cfg = (id ? loadTestConfig(id) : null) ?? DEFAULT_CONFIG;
+      const qs = buildQuestions(set, cfg);
+      setQuestions(qs);
+      setQIdx(0);
+      setSelected(null);
+      setWritten('');
+      setSubmitted(false);
+      setScore(0);
+      setAnswers([]);
+      setScreen('quiz');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!set || set.cards.length < 2) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 0' }}>
@@ -59,6 +89,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
   }
 
   const startQuiz = () => {
+    if (id) saveTestConfig(id, config);
     const qs = buildQuestions(set, config);
     setQuestions(qs);
     setQIdx(0);
