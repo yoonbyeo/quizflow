@@ -12,7 +12,6 @@ interface ImageZoomProps {
 /** 확대 모달 */
 function ZoomModal({ src, alt, onClose }: { src: string; alt?: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
-  const [origin, setOrigin] = useState({ x: 50, y: 50 }); // transform-origin %
   const [dragging, setDragging] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragStart = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
@@ -30,15 +29,22 @@ function ZoomModal({ src, alt, onClose }: { src: string; alt?: string; onClose: 
     setScale(s => Math.min(6, Math.max(0.5, s - e.deltaY * 0.001)));
   };
 
-  // 클릭 확대
-  const handleImgClick = (e: React.MouseEvent<HTMLImageElement>) => {
+  // 클릭: 원래 크기(1x)면 모달 닫기, 확대 상태면 원래 크기로 복원
+  const handleImgClick = (_e: React.MouseEvent<HTMLImageElement>) => {
     if (dragging) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ox = ((e.clientX - rect.left) / rect.width) * 100;
-    const oy = ((e.clientY - rect.top) / rect.height) * 100;
-    setOrigin({ x: ox, y: oy });
-    setScale(s => s < 1.5 ? 2.5 : 1);
-    if (scale >= 1.5) setPos({ x: 0, y: 0 });
+    if (scale <= 1) {
+      // 이미 원래 크기 → 모달 닫기
+      onClose();
+      return;
+    }
+    // 확대 상태 → 원래 크기로
+    setScale(1);
+    setPos({ x: 0, y: 0 });
+  };
+
+  // 배경 클릭은 항상 닫기
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -65,7 +71,7 @@ function ZoomModal({ src, alt, onClose }: { src: string; alt?: string; onClose: 
         backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={handleBackdropClick}
     >
       {/* 툴바 */}
       <div style={{
@@ -93,15 +99,15 @@ function ZoomModal({ src, alt, onClose }: { src: string; alt?: string; onClose: 
       </div>
 
       {/* 힌트 */}
-      {scale === 1 && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', fontSize: 12, color: 'rgba(255,255,255,.45)', pointerEvents: 'none' }}>
-          클릭하여 확대 · 스크롤로 조절 · ESC로 닫기
-        </div>
-      )}
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', fontSize: 12, color: 'rgba(255,255,255,.45)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+        {scale <= 1
+          ? '클릭하면 닫기 · 스크롤로 확대'
+          : '클릭하면 원래 크기 · 스크롤로 조절 · ESC로 닫기'}
+      </div>
 
       {/* 이미지 영역 */}
       <div
-        style={{ overflow: 'hidden', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: scale > 1 ? 'grab' : 'zoom-in' }}
+        style={{ overflow: 'hidden', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: scale > 1 ? 'zoom-out' : 'zoom-out' }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -119,7 +125,7 @@ function ZoomModal({ src, alt, onClose }: { src: string; alt?: string; onClose: 
             objectFit: 'contain',
             borderRadius: 10,
             transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
-            transformOrigin: `${origin.x}% ${origin.y}%`,
+            transformOrigin: 'center center',
             transition: dragging ? 'none' : 'transform .25s cubic-bezier(.4,0,.2,1)',
             userSelect: 'none',
             boxShadow: '0 24px 80px rgba(0,0,0,.7)',
