@@ -6,6 +6,7 @@ import { saveLastMode } from './FlashcardPage';
 import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet, CardStat, TestQuestion } from '../types';
 
+// ── Config 저장/불러오기 ──
 function saveLearnConfig(setId: string, cfg: any) {
   try { localStorage.setItem(`qf-learncfg-${setId}`, JSON.stringify(cfg)); } catch {}
 }
@@ -13,7 +14,7 @@ function loadLearnConfig(setId: string): any | null {
   try { const v = localStorage.getItem(`qf-learncfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
-// 학습하기 진행도 저장/불러오기 (홈 진행도용)
+// ── 진행도 저장/불러오기 (홈 진행도용) ──
 export function saveLearnProgress(setId: string, mastered: number, total: number) {
   try { localStorage.setItem(`qf-learnprog-${setId}`, JSON.stringify({ mastered, total })); } catch {}
 }
@@ -21,11 +22,36 @@ export function loadLearnProgress(setId: string): { mastered: number; total: num
   try { const v = localStorage.getItem(`qf-learnprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
+// ── 완료 여부 ──
 export function saveLearnCompleted(setId: string, done: boolean) {
   try { localStorage.setItem(`qf-completed-learn-${setId}`, done ? '1' : '0'); } catch {}
 }
 export function loadLearnCompleted(setId: string): boolean {
   try { return localStorage.getItem(`qf-completed-learn-${setId}`) === '1'; } catch { return false; }
+}
+
+// ── 세션 상태 저장/불러오기 (이어하기 핵심) ──
+interface LearnSession {
+  screen: 'flash' | 'practice';
+  cardIds: string[];          // sortedCards의 id 순서
+  flashIdx: number;
+  flashResults: boolean[];
+  flashScore: number;
+  practiceCardIds: string[];  // practiceItems의 카드 id 순서
+  practiceTypes: ('mc' | 'written')[];
+  practiceQueue: number[];
+  queuePos: number;
+  masteredSet: number[];      // Set → 배열로 직렬화
+  practiceScore: number;
+}
+function saveLearnSession(setId: string, session: LearnSession) {
+  try { localStorage.setItem(`qf-learnsession-${setId}`, JSON.stringify(session)); } catch {}
+}
+function loadLearnSession(setId: string): LearnSession | null {
+  try { const v = localStorage.getItem(`qf-learnsession-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function clearLearnSession(setId: string) {
+  try { localStorage.removeItem(`qf-learnsession-${setId}`); } catch {}
 }
 
 interface LearnPageProps {
@@ -44,7 +70,7 @@ interface LearnConfig {
 interface PracticeItem {
   card: CardSet['cards'][0];
   type: 'mc' | 'written';
-  mcQuestion: TestQuestion | null; // 미리 생성해서 고정
+  mcQuestion: TestQuestion | null;
 }
 
 export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
@@ -63,18 +89,15 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   const [screen, setScreen] = useState<Screen>('config');
   const [sortedCards, setSortedCards] = useState<CardSet['cards']>([]);
 
-  // Flash state
   const [flashIdx, setFlashIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [flashResults, setFlashResults] = useState<boolean[]>([]);
   const [flashScore, setFlashScore] = useState(0);
 
-  // Practice state — 미리 생성된 문제 배열
   const [practiceItems, setPracticeItems] = useState<PracticeItem[]>([]);
-  // 현재 풀어야 할 큐 (틀리면 다시 뒤에 추가)
-  const [practiceQueue, setPracticeQueue] = useState<number[]>([]); // practiceItems 인덱스
-  const [queuePos, setQueuePos] = useState(0); // 큐에서 현재 위치
-  const [masteredSet, setMasteredSet] = useState<Set<number>>(new Set()); // 맞춘 item 인덱스
+  const [practiceQueue, setPracticeQueue] = useState<number[]>([]);
+  const [queuePos, setQueuePos] = useState(0);
+  const [masteredSet, setMasteredSet] = useState<Set<number>>(new Set());
 
   const [selected, setSelected] = useState<string | null>(null);
   const [written, setWritten] = useState('');
@@ -104,16 +127,14 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     );
   };
 
-  // 문제 목록을 미리 생성 (보기 순서 고정)
-  const buildPracticeItems = (cards: CardSet['cards']): PracticeItem[] => {
+  const buildPracticeItems = (cards: CardSet['cards'], cfg: LearnConfig): PracticeItem[] => {
     return cards.map((card, i) => {
-      const canMC = config.includeMultipleChoice && set.cards.length >= 4;
-      const canW = config.includeWritten;
+      const canMC = cfg.includeMultipleChoice && set.cards.length >= 4;
+      const canW = cfg.includeWritten;
       let type: 'mc' | 'written' = 'written';
       if (canMC && canW) type = i % 2 === 0 ? 'mc' : 'written';
       else if (canMC) type = 'mc';
       else type = 'written';
-
       return {
         card,
         type,
@@ -122,36 +143,84 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     });
   };
 
-  // masteredSet 또는 flashIdx가 변할 때마다 진행도 저장
+  // ── 세션 저장 (flash/practice 상태 변경마다) ──
   useEffect(() => {
-    if (id && sortedCards.length > 0) {
-      // 플래시카드 단계: flashIdx / total, 연습 단계: mastered / total 기준으로 저장
-      const progressMastered = screen === 'flash' ? flashIdx : masteredSet.size;
-      saveLearnProgress(id, progressMastered, sortedCards.length);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, masteredSet, flashIdx, sortedCards.length]);
+    if (!id || screen === 'config' || screen === 'result') return;
+    if (sortedCards.length === 0) return;
 
-  // resume=1 이면 설정 화면 건너뛰고 바로 시작 — set이 준비되면 실행
+    const session: LearnSession = {
+      screen: screen as 'flash' | 'practice',
+      cardIds: sortedCards.map(c => c.id),
+      flashIdx,
+      flashResults,
+      flashScore,
+      practiceCardIds: practiceItems.map(p => p.card.id),
+      practiceTypes: practiceItems.map(p => p.type),
+      practiceQueue,
+      queuePos,
+      masteredSet: [...masteredSet],
+      practiceScore,
+    };
+    saveLearnSession(id, session);
+
+    // 홈 진행도 저장
+    const progressMastered = screen === 'flash' ? flashIdx : masteredSet.size;
+    saveLearnProgress(id, progressMastered, sortedCards.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, flashIdx, masteredSet, queuePos, practiceQueue]);
+
+  // ── resume=1: set이 준비되면 이전 세션 복원 ──
   const [resumed, setResumed] = useState(false);
   useEffect(() => {
     if (!resume || resumed || !set || set.cards.length === 0) return;
-    setResumed(true); // 한 번만 실행
+    setResumed(true);
 
     const cfg: LearnConfig = (id ? loadLearnConfig(id) : null) ??
       { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
     setConfig(cfg);
 
-    const priority = (c: CardStat | undefined) => {
-      if (!c || c.difficulty === 'unrated') return 0;
-      if (c.difficulty === 'hard') return 1;
-      if (c.difficulty === 'medium') return 2;
-      return 3;
-    };
-    const cards = shuffleArray([...set.cards]).sort((a, b) =>
-      priority(set.studyStats?.cardStats?.[a.id] as CardStat | undefined) -
-      priority(set.studyStats?.cardStats?.[b.id] as CardStat | undefined)
-    );
+    // 저장된 세션이 있으면 그 상태에서 복원
+    const session = id ? loadLearnSession(id) : null;
+    if (session) {
+      // 카드 ID → 실제 카드 객체 복원
+      const cardMap = Object.fromEntries(set.cards.map(c => [c.id, c]));
+      const restoredSorted = session.cardIds.map(cid => cardMap[cid]).filter(Boolean) as CardSet['cards'];
+
+      if (restoredSorted.length > 0) {
+        setSortedCards(restoredSorted);
+        setFlashIdx(session.flashIdx);
+        setFlashResults(session.flashResults);
+        setFlashScore(session.flashScore);
+        setQueuePos(session.queuePos);
+        setPracticeQueue(session.practiceQueue);
+        setMasteredSet(new Set(session.masteredSet));
+        setPracticeScore(session.practiceScore);
+        setFlipped(false);
+        setSubmitted(false);
+        setSelected(null);
+        setWritten('');
+
+        if (session.screen === 'practice' && session.practiceCardIds.length > 0) {
+          const restoredItems: PracticeItem[] = session.practiceCardIds.map((cid, i) => {
+            const card = cardMap[cid];
+            const type = session.practiceTypes[i] ?? 'written';
+            return {
+              card,
+              type,
+              mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null,
+            };
+          }).filter(p => p.card != null);
+          setPracticeItems(restoredItems);
+          setScreen('practice');
+        } else {
+          setScreen(session.screen);
+        }
+        return;
+      }
+    }
+
+    // 세션 없으면 처음부터 시작
+    const cards = buildSorted();
     setSortedCards(cards);
     setFlashResults([]);
     setFlashScore(0);
@@ -166,29 +235,21 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     if (cfg.includeFlashcard) {
       setScreen('flash');
     } else {
-      const canMC = cfg.includeMultipleChoice && set.cards.length >= 4;
-      const canW = cfg.includeWritten;
-      const items: PracticeItem[] = cards.map((card, i) => {
-        let type: 'mc' | 'written' = 'written';
-        if (canMC && canW) type = i % 2 === 0 ? 'mc' : 'written';
-        else if (canMC) type = 'mc';
-        return {
-          card,
-          type,
-          mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null,
-        };
-      });
+      const items = buildPracticeItems(cards, cfg);
       setPracticeItems(items);
       setPracticeQueue(items.map((_, i) => i));
       setQueuePos(0);
       setScreen('practice');
     }
-  // set이 준비되면 실행 (cardSets 비동기 로드 대응)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [set, resume]);
 
   const startLearn = () => {
-    if (id) { saveLearnConfig(id, config); saveLearnCompleted(id, false); }
+    if (id) {
+      saveLearnConfig(id, config);
+      saveLearnCompleted(id, false);
+      clearLearnSession(id);
+    }
     const cards = buildSorted();
     setSortedCards(cards);
     setFlashResults([]);
@@ -204,10 +265,9 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     if (config.includeFlashcard) {
       setScreen('flash');
     } else {
-      const items = buildPracticeItems(cards);
-      const queue = items.map((_, i) => i);
+      const items = buildPracticeItems(cards, config);
       setPracticeItems(items);
-      setPracticeQueue(queue);
+      setPracticeQueue(items.map((_, i) => i));
       setQueuePos(0);
       setScreen('practice');
     }
@@ -215,11 +275,11 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
 
   const goToPractice = (cards: CardSet['cards']) => {
     if (!config.includeMultipleChoice && !config.includeWritten) {
-      if (id) saveLearnCompleted(id, true);
+      if (id) { saveLearnCompleted(id, true); clearLearnSession(id); }
       setScreen('result');
       return;
     }
-    const items = buildPracticeItems(cards);
+    const items = buildPracticeItems(cards, config);
     const queue = items.map((_, i) => i);
     setPracticeItems(items);
     setPracticeQueue(queue);
@@ -230,7 +290,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     setScreen('practice');
   };
 
-  // ── Config ──
+  // ── Config 화면 ──
   if (screen === 'config') {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -277,7 +337,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     );
   }
 
-  // ── Flash phase ──
+  // ── Flash 단계 ──
   if (screen === 'flash') {
     const card = sortedCards[flashIdx];
     if (!card) return null;
@@ -352,21 +412,20 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     );
   }
 
-  // ── Practice phase ──
+  // ── Practice 단계 ──
   if (screen === 'practice') {
-    // 현재 큐에서 풀어야 할 아이템 인덱스
     const currentItemIdx = practiceQueue[queuePos];
     if (currentItemIdx === undefined) {
-      // 큐 소진 = 완료
-      if (id) saveLearnCompleted(id, true);
+      if (id) { saveLearnCompleted(id, true); clearLearnSession(id); }
       setScreen('result');
       return null;
     }
 
     const item = practiceItems[currentItemIdx];
+    if (!item) return null;
     const { card, type, mcQuestion } = item;
     const isMC = type === 'mc';
-    const total = practiceItems.length; // 원래 카드 수 (진행도 기준)
+    const total = practiceItems.length;
     const mastered = masteredSet.size;
     const pct = Math.round((mastered / total) * 100);
 
@@ -389,10 +448,8 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
 
     const nextPractice = () => {
       if (correct) {
-        // 맞았으면 단순히 다음으로
         setQueuePos(p => p + 1);
       } else {
-        // 틀렸으면 큐 끝에 다시 추가
         setPracticeQueue(q => [...q, currentItemIdx]);
         setQueuePos(p => p + 1);
       }
@@ -400,12 +457,6 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       setWritten('');
       setSubmitted(false);
       setCorrect(false);
-
-      // 다음 위치에서 큐 소진 체크
-      const nextPos = queuePos + 1;
-      if (nextPos >= practiceQueue.length + (correct ? 0 : 0)) {
-        // 큐가 끝났는지는 다음 렌더에서 체크
-      }
     };
 
     const stepLabel = config.includeFlashcard
@@ -430,7 +481,6 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
           <div style={{ flex: 1, height: 4, borderRadius: 99, background: 'var(--purple)' }} />
         </div>
 
-        {/* 진행도: 맞은 카드 수 기준 */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
             <span>숙달 진행도</span>
@@ -441,7 +491,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
           </div>
           {practiceQueue.length - queuePos > total && (
             <div style={{ fontSize: 11, color: 'var(--yellow)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <AlertCircle size={11} /> 틀린 카드 {practiceQueue.length - queuePos - (total - mastered)}개가 다시 출제됩니다
+              <AlertCircle size={11} /> 틀린 카드가 다시 출제됩니다
             </div>
           )}
         </div>
@@ -532,7 +582,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
           <div className="stat-card"><div className="stat-value" style={{ color: avgPct >= 70 ? 'var(--green)' : 'var(--yellow)', fontSize: 22 }}>{avgPct}%</div><div className="stat-label">종합</div></div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button className="btn btn-secondary btn-md" onClick={() => setScreen('config')}><RotateCcw size={15} /> 다시</button>
+          <button className="btn btn-secondary btn-md" onClick={() => { if (id) clearLearnSession(id); setScreen('config'); }}><RotateCcw size={15} /> 다시</button>
           <button className="btn btn-primary btn-md" onClick={() => navigate(`/set/${id}`)}>세트로</button>
         </div>
       </div>
