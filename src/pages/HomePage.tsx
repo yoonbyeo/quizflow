@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Zap, PenLine, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, Zap, Shuffle, ArrowRight, Brain, ChevronLeft, ChevronRight, RotateCcw, Flame, RefreshCw } from 'lucide-react';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import { loadLastMode } from './FlashcardPage';
 import { loadLearnProgress, loadLearnCompleted } from './LearnPage';
@@ -12,7 +12,6 @@ import type { CardSet, CardStat, Folder } from '../types';
 const MODE_META = {
   flashcard: { label: '플래시카드', color: 'var(--blue)', path: (id: string) => `/flashcard/${id}` },
   learn:     { label: '학습하기',   color: 'var(--purple)', path: (id: string) => `/learn/${id}` },
-  test:      { label: '테스트',     color: 'var(--green)', path: (id: string) => `/test/${id}` },
   match:     { label: '매칭',       color: 'var(--yellow)', path: (id: string) => `/match/${id}` },
   write:     { label: '쓰기',       color: '#f0883e', path: (id: string) => `/write/${id}` },
 } as const;
@@ -111,10 +110,6 @@ function SetCard({ set, onClick, expanded, onToggleExpand }: {
         <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
           onClick={() => navigate(`/flashcard/${set.id}`)}>
           <Zap size={12} /> 플래시
-        </button>
-        <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
-          onClick={() => navigate(`/test/${set.id}`)}>
-          <PenLine size={12} /> 테스트
         </button>
         <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
           onClick={() => navigate(`/match/${set.id}`)}>
@@ -344,7 +339,6 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
           {[
             { icon: Zap, label: '낱말카드', sub: '플래시카드', color: 'var(--blue)', bg: 'var(--blue-bg)', path: cardSets[0] ? `/flashcard/${cardSets[0].id}` : '/library' },
             { icon: Brain, label: '학습하기', sub: '적응형 학습', color: 'var(--purple)', bg: 'var(--purple-bg)', path: cardSets[0] ? `/learn/${cardSets[0].id}` : '/library' },
-            { icon: PenLine, label: '테스트', sub: '실력 점검', color: 'var(--green)', bg: 'var(--green-bg)', path: cardSets[0] ? `/test/${cardSets[0].id}` : '/library' },
             { icon: Shuffle, label: '카드 맞추기', sub: '매칭 게임', color: 'var(--yellow)', bg: 'var(--yellow-bg)', path: cardSets[0] ? `/match/${cardSets[0].id}` : '/library' },
             { icon: Plus, label: '새 세트', sub: '직접 만들기', color: '#f0883e', bg: 'rgba(240,136,62,.15)', path: '/create' },
           ].map(({ icon: Icon, label, sub, color, bg, path }) => (

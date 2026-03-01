@@ -10,7 +10,6 @@ import CreateSetPage from './pages/CreateSetPage';
 import EditSetPage from './pages/EditSetPage';
 import SetDetailPage from './pages/SetDetailPage';
 import FlashcardPage from './pages/FlashcardPage';
-import TestPage from './pages/TestPage';
 import MatchPage from './pages/MatchPage';
 import WritePage from './pages/WritePage';
 import LearnPage from './pages/LearnPage';
@@ -64,7 +63,6 @@ function AppContent() {
                 <Route path="/edit/:id" element={<EditSetPage cardSets={cardSets} folders={folders} onUpdateSet={updateCardSet} onAddCard={addCard} onUpdateCard={updateCard} onDeleteCard={deleteCard} onSaveCards={saveCardsForSet} onUploadImage={uploadCardImage} />} />
                 <Route path="/set/:id" element={<SetDetailPage cardSets={cardSets} onResetStats={resetStats} />} />
                 <Route path="/flashcard/:id" element={<FlashcardPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
-                <Route path="/test/:id" element={<TestPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/match/:id" element={<MatchPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/write/:id" element={<WritePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
