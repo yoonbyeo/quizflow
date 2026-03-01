@@ -224,16 +224,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
     }
   }, [id, userId]);
 
-  // 퀴즈 도중 설정 화면으로 돌아갈 때: 세션은 유지한 채 화면만 전환
-  const backToConfig = useCallback(() => {
-    setScreen('config');
-    setShowReview(false);
-    setSubmitted(false);
-    setSelected(null);
-    setWritten('');
-    setCorrect(false);
-  }, []);
-
   const submit = useCallback(async () => {
     const { submitted: sub, questions: qs, qIdx: qi, score: sc, answers: ans } = stateRef.current;
     if (sub || qs.length === 0 || qi >= qs.length) return;
@@ -306,7 +296,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
   // ── Config 화면 ──
   if (screen === 'config') {
     const maxQ = Math.min(set.cards.length, 20);
-    const hasPausedSession = questions.length > 0 && qIdx < questions.length;
     return (
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ marginBottom: 20, gap: 4 }}>
@@ -314,22 +303,6 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
         </button>
         <div className="card card-glow" style={{ padding: 28 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 20 }}>테스트 구성하기</h2>
-
-          {hasPausedSession && (
-            <div style={{ marginBottom: 20, padding: '14px 16px', background: 'var(--blue-bg)', border: '1px solid rgba(56,139,253,.3)', borderRadius: 12 }}>
-              <p style={{ fontSize: 13, color: 'var(--blue)', fontWeight: 600, marginBottom: 10 }}>
-                진행 중인 테스트가 있어요 ({qIdx + 1} / {questions.length} 문제)
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setScreen('quiz')}>
-                  이어하기
-                </button>
-                <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={resetToConfig}>
-                  처음부터
-                </button>
-              </div>
-            </div>
-          )}
 
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', display: 'block', marginBottom: 8, textTransform: 'uppercase' }}>
@@ -373,12 +346,10 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
             ))}
           </div>
 
-          {!hasPausedSession && (
-            <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={startQuiz}
-              disabled={!config.includeMultipleChoice && !config.includeWritten}>
-              테스트 시작
-            </button>
-          )}
+          <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={startQuiz}
+            disabled={!config.includeMultipleChoice && !config.includeWritten}>
+            테스트 시작
+          </button>
         </div>
       </div>
     );
@@ -449,7 +420,7 @@ export default function TestPage({ cardSets, onUpdateStat, userId }: TestPagePro
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="btn btn-ghost btn-sm" onClick={backToConfig} style={{ gap: 4 }}>
+        <button className="btn btn-ghost btn-sm" onClick={resetToConfig} style={{ gap: 4 }}>
           <Settings size={14} /> 설정
         </button>
         <span style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{qIdx + 1} / {questions.length}</span>
