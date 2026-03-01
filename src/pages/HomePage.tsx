@@ -216,12 +216,12 @@ export default function HomePage({ cardSets, loading, userId }: HomePageProps) {
   };
 
   // 가장 최근에 공부한 세트 (진행 중, 완료되지 않은 것만) — 최대 2개
-  // 학습하기(learn)만 이어하기 표시, Supabase 세션 로드 완료 후에만 계산
+  // 학습하기(learn), 테스트(test)만 이어하기 표시, Supabase 세션 로드 완료 후에만 계산
   const inProgress = !sessionLoaded ? [] : [...cardSets]
     .filter(s => {
       if (!s.studyStats?.lastStudied) return false;
       const lastMode = getLastMode(s.id);
-      if (lastMode !== 'learn') return false;
+      if (lastMode !== 'learn' && lastMode !== 'test') return false;
       return !isCompleted(s.id, lastMode);
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
