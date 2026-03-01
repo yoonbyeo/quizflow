@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ChevronRight, BookOpen, Brain, RotateCcw, Filter } from 'lucide-react';
+import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet } from '../types';
 
 interface WrongNotePageProps {
@@ -148,7 +149,7 @@ export default function WrongNotePage({ cardSets }: WrongNotePageProps) {
                   {isOpen && (
                     <div style={{ borderTop: '1px solid var(--border)', padding: '14px 16px', background: 'var(--bg-2)' }}>
                       {c.imageUrl && (
-                        <img src={c.imageUrl} style={{ maxHeight: 120, borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />
+                        <ImageZoom src={c.imageUrl} style={{ maxHeight: 120, borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />
                       )}
                       <div style={{ background: 'var(--bg-3)', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>정답 (정의)</div>

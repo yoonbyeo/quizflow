@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, RotateCcw, Trophy } from 'lucide-react';
 import { shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
+import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet } from '../types';
 
 interface WritePageProps {
@@ -88,7 +89,7 @@ export default function WritePage({ cardSets, onUpdateStat }: WritePageProps) {
       <div className="card card-glow" style={{ padding: 28, marginBottom: 16 }}>
         <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>용어</p>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16, lineHeight: 1.4 }}>{card.term}</h2>
-        {card.imageUrl && <img src={card.imageUrl} style={{ maxHeight: 120, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
+        {card.imageUrl && <ImageZoom src={card.imageUrl} style={{ maxHeight: 120, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
         {card.hint && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>힌트: {card.hint}</p>}
 
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>정의를 입력하세요:</p>

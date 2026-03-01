@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RotateCcw, ThumbsUp, ThumbsDown, Shuffle, Settings } from 'lucide-react';
 import { shuffleArray } from '../utils';
+import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet } from '../types';
 
 interface FlashcardPageProps {
@@ -131,7 +132,7 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
               {answerWith === 'definition' ? '용어' : '정의'}
             </div>
             {card.imageUrl && !flipped && (
-              <img src={card.imageUrl} style={{ maxHeight: 200, maxWidth: '85%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
+              <ImageZoom src={card.imageUrl} style={{ maxHeight: 200, maxWidth: '85%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
             )}
             <p style={{ fontSize: card.imageUrl ? 20 : 26, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
             {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>힌트: {card.hint}</p>}

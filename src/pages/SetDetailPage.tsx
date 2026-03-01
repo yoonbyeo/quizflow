@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Zap, PenLine, Shuffle, BookText, Edit2, RotateCcw, ChevronLeft, Brain, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet, CardStat } from '../types';
 
 interface SetDetailPageProps {
@@ -39,7 +40,7 @@ function InlineFlashcard({ set }: { set: CardSet }) {
           <div className="flip-front">
             <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>{frontLabel}</div>
             {card.imageUrl && !flipped && (
-              <img src={card.imageUrl} style={{ maxHeight: 160, maxWidth: '90%', borderRadius: 10, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
+              <ImageZoom src={card.imageUrl} style={{ maxHeight: 160, maxWidth: '90%', borderRadius: 10, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)' }} />
             )}
             <p style={{ fontSize: card.imageUrl ? 20 : 24, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
             {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 10 }}>힌트: {card.hint}</p>}
@@ -225,8 +226,9 @@ export default function SetDetailPage({ cardSets, onResetStats }: SetDetailPageP
                   {card.term}
                 </div>
                 {card.imageUrl && (
-                  <img src={card.imageUrl}
-                    style={{ marginTop: 6, maxWidth: 100, borderRadius: 6, border: '1px solid var(--border)', filter: blurTerms ? 'blur(6px)' : 'none', transition: 'filter .2s' }} />
+                  blurTerms
+                    ? <img src={card.imageUrl} style={{ marginTop: 6, maxWidth: 100, borderRadius: 6, border: '1px solid var(--border)', filter: 'blur(6px)', transition: 'filter .2s' }} />
+                    : <ImageZoom src={card.imageUrl} style={{ marginTop: 6, maxWidth: 100, borderRadius: 6, border: '1px solid var(--border)', display: 'block' }} />
                 )}
               </div>
 

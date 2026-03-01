@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Brain, AlertCircle } from 'lucide-react';
 import { generateMultipleChoiceQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
+import ImageZoom from '../components/ui/ImageZoom';
 import type { CardSet, CardStat, TestQuestion } from '../types';
 
 interface LearnPageProps {
@@ -235,7 +236,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
             <div className="flip-front">
               <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 16 }}>용어</div>
               <p style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.4 }}>{card.term}</p>
-              {card.imageUrl && <img src={card.imageUrl} style={{ marginTop: 12, maxHeight: 80, borderRadius: 6, objectFit: 'contain' }} />}
+              {card.imageUrl && <ImageZoom src={card.imageUrl} style={{ marginTop: 12, maxHeight: 80, borderRadius: 6, objectFit: 'contain' }} />}
               {!flipped && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 20 }}>클릭하여 정의 보기</p>}
             </div>
             <div className="flip-back">
@@ -361,7 +362,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>용어</p>
           <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, lineHeight: 1.4 }}>{card.term}</h2>
-          {card.imageUrl && <img src={card.imageUrl} style={{ maxHeight: 100, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
+          {card.imageUrl && <ImageZoom src={card.imageUrl} style={{ maxHeight: 100, borderRadius: 8, marginBottom: 16, objectFit: 'contain' }} />}
 
           {isMC && mcQuestion ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
