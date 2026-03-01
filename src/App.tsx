@@ -69,7 +69,7 @@ function AppContent() {
                 <Route path="/write/:id" element={<WritePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/stats" element={<StatsPage cardSets={cardSets} />} />
-                <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} />} />
+                <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/review" element={<ReviewPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/profile" element={<ProfilePage user={user} />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
