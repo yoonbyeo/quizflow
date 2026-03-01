@@ -228,7 +228,7 @@ export default function FlashcardPage({ cardSets, onUpdateStat, userId }: Flashc
               {answerWith === 'definition' ? '용어' : '정의'}
             </div>
             {card.imageUrl && !flipped && (
-              <ImageZoom src={card.imageUrl} style={{ width: '100%', maxWidth: '100%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)', display: 'block' }} />
+              <ImageZoom src={card.imageUrl} style={{ width: '60%', maxWidth: '60%', borderRadius: 12, objectFit: 'contain', marginBottom: 14, border: '1px solid var(--border)', display: 'block' }} />
             )}
             <p style={{ fontSize: card.imageUrl ? 20 : 26, fontWeight: 700, lineHeight: 1.4 }}>{front}</p>
             {card.hint && !flipped && <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 12 }}>힌트: {card.hint}</p>}
