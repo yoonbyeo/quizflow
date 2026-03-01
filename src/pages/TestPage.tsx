@@ -85,7 +85,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     return DEFAULT_CONFIG;
   });
 
-  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>('config');
+  const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>(() => resume ? 'quiz' : 'config');
   const [questions, setQuestions] = useState<TestQuestion[]>([]);
   const [qIdx, setQIdx] = useState(0);
   const [score, setScore] = useState(0);

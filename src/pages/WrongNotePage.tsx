@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronRight, BookOpen, Brain, RotateCcw, Filter } from 'lucide-react';
+import { AlertCircle, ChevronRight, BookOpen, Brain, RotateCcw, Filter, ClipboardList } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import type { CardSet } from '../types';
@@ -107,7 +107,7 @@ export default function WrongNotePage({ cardSets }: WrongNotePageProps) {
       ) : (
         <>
           {/* 필터 & 정렬 */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <Filter size={14} color="var(--text-3)" />
             <select className="input" style={{ width: 'auto', fontSize: 13, padding: '6px 10px' }}
               value={filterSetId} onChange={e => setFilterSetId(e.target.value)}>
@@ -120,6 +120,41 @@ export default function WrongNotePage({ cardSets }: WrongNotePageProps) {
               <option value="ratio">오답률순</option>
             </select>
             <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-2)' }}>{sorted.length}개</span>
+          </div>
+
+          {/* 필터 세트 기준 학습 시작 버튼 */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+            {filterSetId !== 'all' ? (
+              <>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => navigate(`/learn/${filterSetId}`)}
+                  style={{ gap: 6 }}>
+                  <Brain size={13} /> 학습 시작
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate(`/test/${filterSetId}`)}
+                  style={{ gap: 6 }}>
+                  <ClipboardList size={13} /> 테스트 시작
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  선택된 세트의 오답 카드로 바로 시작합니다
+                </span>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-secondary btn-sm" disabled style={{ gap: 6, opacity: 0.4, cursor: 'not-allowed' }}>
+                  <Brain size={13} /> 학습 시작
+                </button>
+                <button className="btn btn-secondary btn-sm" disabled style={{ gap: 6, opacity: 0.4, cursor: 'not-allowed' }}>
+                  <ClipboardList size={13} /> 테스트 시작
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  세트를 선택하면 해당 세트로 바로 시작할 수 있어요
+                </span>
+              </>
+            )}
           </div>
 
           {/* 카드 목록 */}
