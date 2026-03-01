@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ThumbsUp, ThumbsDown, RotateCcw, CheckCircle, Brain } from 'lucide-react';
 import ImageZoom from '../components/ui/ImageZoom';
 import InfoTooltip from '../components/ui/InfoTooltip';
+import { upsertSession, loadSession, deleteSession } from '../hooks/useStudySync';
 import type { CardSet, Card } from '../types';
 
 interface ReviewPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
+  userId?: string;
 }
 
 interface ReviewCard extends Card {
@@ -15,7 +17,8 @@ interface ReviewCard extends Card {
   setId: string;
 }
 
-// 오늘 날짜 키 (YYYY-MM-DD)
+const REVIEW_SET_ID = '00000000-0000-0000-0000-000000000000';
+
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -26,57 +29,80 @@ interface ReviewResult {
   correct: number;
 }
 
-function saveReviewResult(result: ReviewResult) {
+function saveReviewResultLocal(result: ReviewResult) {
   try { localStorage.setItem('qf-review-result', JSON.stringify(result)); } catch {}
 }
-
-function loadReviewResult(): ReviewResult | null {
+function loadReviewResultLocal(): ReviewResult | null {
   try {
     const v = localStorage.getItem('qf-review-result');
     if (!v) return null;
     const r: ReviewResult = JSON.parse(v);
-    return r.date === todayKey() ? r : null; // 오늘 날짜 것만 유효
+    return r.date === todayKey() ? r : null;
   } catch { return null; }
 }
-
-function clearReviewResult() {
+function clearReviewResultLocal() {
   try { localStorage.removeItem('qf-review-result'); } catch {}
 }
 
-export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) {
+export default function ReviewPage({ cardSets, onUpdateStat, userId }: ReviewPageProps) {
   const navigate = useNavigate();
   const now = Date.now();
 
-  // 오늘 복습 대상: nextReview가 없거나(한번도 안 한) 또는 nextReview <= 지금
   const dueCards: ReviewCard[] = cardSets.flatMap(set =>
     set.cards
       .filter(card => {
         const stat = set.studyStats?.cardStats?.[card.id];
-        if (!stat) return true; // 한 번도 학습 안 한 카드
+        if (!stat) return true;
         if (!stat.nextReview) return true;
         return stat.nextReview <= now;
       })
       .map(card => ({ ...card, setTitle: set.title, setId: set.id }))
   );
 
-  // 오늘 이미 완료한 결과가 있으면 바로 완료 화면으로
-  const savedResult = loadReviewResult();
+  // 완료 결과 초기화 — 로컬 먼저, Supabase로 보정
+  const [completedResult, setCompletedResult] = useState<{ done: number; correct: number } | null>(() => {
+    const local = loadReviewResultLocal();
+    return local ? { done: local.done, correct: local.correct } : null;
+  });
+  const [cloudChecked, setCloudChecked] = useState(false);
+
+  useEffect(() => {
+    if (!userId || cloudChecked) return;
+    setCloudChecked(true);
+    loadSession(userId, REVIEW_SET_ID, 'review').then(session => {
+      if (session && !session.completed) return; // 완료 안 됐으면 무시
+      if (session && session.completed && session.progress.date === todayKey()) {
+        const done = session.progress.done as number;
+        const correct = session.progress.correct as number;
+        // localStorage도 동기화
+        saveReviewResultLocal({ date: todayKey(), done, correct });
+        setCompletedResult({ done, correct });
+      }
+    });
+  }, [userId, cloudChecked]);
 
   const [queue, setQueue] = useState<ReviewCard[]>(() => [...dueCards]);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(0);
   const [correct, setCorrect] = useState(0);
-  // 완료 화면 표시 여부 (저장된 결과 복원 or 세션 완료 시)
-  const [completedResult, setCompletedResult] = useState<{ done: number; correct: number } | null>(
-    savedResult ? { done: savedResult.done, correct: savedResult.correct } : null
-  );
 
-  // 오늘 완료 결과 표시
+  const saveResult = (result: ReviewResult) => {
+    saveReviewResultLocal(result);
+    if (userId) {
+      upsertSession(userId, REVIEW_SET_ID, 'review', { date: result.date, done: result.done, correct: result.correct }, true);
+    }
+  };
+
+  const clearResult = () => {
+    clearReviewResultLocal();
+    if (userId) deleteSession(userId, REVIEW_SET_ID, 'review');
+  };
+
   if (completedResult) {
     const pct = completedResult.done > 0 ? Math.round((completedResult.correct / completedResult.done) * 100) : 0;
     const handleRetry = () => {
-      clearReviewResult();
+      clearResult();
       setQueue([...dueCards]);
       setIdx(0);
       setDone(0);
@@ -123,12 +149,9 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
     );
   }
 
-  // 세션 진행 중 완료 체크
   if (done >= queue.length && done > 0) {
-    // 이미 completedResult가 없으면 저장하고 표시 (이 분기는 거의 도달 안 하지만 안전망)
-    const result = { done, correct };
-    saveReviewResult({ date: todayKey(), ...result });
-    // completedResult state를 set하면 re-render → 위의 completedResult 분기에서 처리
+    const result = { date: todayKey(), done, correct };
+    saveResult(result);
   }
 
   const card = queue[idx];
@@ -143,11 +166,10 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
     setIdx(i => i + 1);
     setFlipped(false);
 
-    // 마지막 카드였으면 결과 저장 후 완료 화면으로
     if (newDone >= queue.length) {
-      const result = { done: newDone, correct: newCorrect };
-      saveReviewResult({ date: todayKey(), ...result });
-      setCompletedResult(result);
+      const result = { date: todayKey(), done: newDone, correct: newCorrect };
+      saveResult(result);
+      setCompletedResult({ done: newDone, correct: newCorrect });
     }
   };
 
@@ -155,7 +177,6 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
 
   return (
     <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> 홈
@@ -172,7 +193,6 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
         <span style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{idx + 1} / {queue.length}</span>
       </div>
 
-      {/* 진행바 */}
       <div style={{ marginBottom: 20 }}>
         <div className="progress-track" style={{ height: 6 }}>
           <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--purple), var(--blue))', borderRadius: 99, transition: 'width .3s' }} />
@@ -183,7 +203,6 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
         </div>
       </div>
 
-      {/* 카드 */}
       <div className="flip-card" style={{ height: card.imageUrl ? 400 : 320, cursor: 'pointer', marginBottom: 20 }}
         onClick={() => setFlipped(f => !f)}>
         <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
@@ -203,7 +222,6 @@ export default function ReviewPage({ cardSets, onUpdateStat }: ReviewPageProps) 
         </div>
       </div>
 
-      {/* 평가 버튼 */}
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
         {flipped ? (
           <>

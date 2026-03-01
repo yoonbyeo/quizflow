@@ -3,30 +3,28 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RotateCcw, ThumbsUp, ThumbsDown, Shuffle, Settings } from 'lucide-react';
 import { shuffleArray } from '../utils';
 import ImageZoom from '../components/ui/ImageZoom';
+import { upsertSession, loadSession } from '../hooks/useStudySync';
 import type { CardSet } from '../types';
 
 interface FlashcardPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
+  userId?: string;
 }
 
-// ── 진행 상태 저장/불러오기 ──
+// ── localStorage 헬퍼 (빠른 읽기 / 오프라인 fallback) ──
 export function saveProgress(setId: string, idx: number) {
   try { localStorage.setItem(`qf-progress-${setId}`, String(idx)); } catch {}
 }
 export function loadProgress(setId: string): number {
   try { return Math.max(0, parseInt(localStorage.getItem(`qf-progress-${setId}`) ?? '0', 10) || 0); } catch { return 0; }
 }
-
-// ── 완료 여부 저장/불러오기 ──
 export function saveCompleted(setId: string, mode: string, done: boolean) {
   try { localStorage.setItem(`qf-completed-${mode}-${setId}`, done ? '1' : '0'); } catch {}
 }
 export function loadCompleted(setId: string, mode: string): boolean {
   try { return localStorage.getItem(`qf-completed-${mode}-${setId}`) === '1'; } catch { return false; }
 }
-
-// ── 마지막 학습 모드 저장/불러오기 ──
 export type LastMode = 'flashcard' | 'learn' | 'test' | 'match' | 'write';
 export function saveLastMode(setId: string, mode: LastMode) {
   try { localStorage.setItem(`qf-lastmode-${setId}`, mode); } catch {}
@@ -35,16 +33,14 @@ export function loadLastMode(setId: string): LastMode | null {
   try { return (localStorage.getItem(`qf-lastmode-${setId}`) as LastMode) || null; } catch { return null; }
 }
 
-export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageProps) {
+export default function FlashcardPage({ cardSets, onUpdateStat, userId }: FlashcardPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
 
-  // 진입 즉시 모드 저장
   if (id) saveLastMode(id, 'flashcard');
 
-  // 시작 인덱스: URL ?start= > localStorage 저장값 > 0
   const getStartIdx = () => {
     const param = parseInt(searchParams.get('start') ?? '-1', 10);
     if (param >= 0) return Math.min(param, (set?.cards.length ?? 1) - 1);
@@ -57,25 +53,51 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
     return Math.min(start, (set?.cards.length ?? 1) - 1);
   });
   const [flipped, setFlipped] = useState(false);
-  const [rated, setRated] = useState<Set<number>>(new Set()); // 평가한 인덱스
+  const [rated, setRated] = useState<Set<number>>(new Set());
   const [answerWith, setAnswerWith] = useState<'definition' | 'term'>('definition');
   const [showSettings, setShowSettings] = useState(false);
 
-  // idx가 바뀔 때마다 localStorage에 저장, 마지막 카드면 완료 표시
+  // Supabase에서 초기 진행 위치 로드 (userId 있을 때만)
+  useEffect(() => {
+    if (!userId || !id) return;
+    const param = parseInt(searchParams.get('start') ?? '-1', 10);
+    if (param >= 0) return; // URL에 명시적 start가 있으면 Supabase 조회 불필요
+    loadSession(userId, id, 'flashcard').then(session => {
+      if (session && !session.completed) {
+        const cloudIdx = typeof session.progress.idx === 'number' ? session.progress.idx : 0;
+        const clamped = Math.min(cloudIdx, (set?.cards.length ?? 1) - 1);
+        setIdx(clamped);
+        saveProgress(id, clamped); // localStorage도 동기화
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, id]);
+
+  // idx가 바뀔 때마다 localStorage + Supabase에 저장
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!id) return;
+    const completed = idx >= cards.length - 1;
     saveProgress(id, idx);
-    saveCompleted(id, 'flashcard', idx >= cards.length - 1);
-  }, [id, idx, cards.length]);
+    saveCompleted(id, 'flashcard', completed);
 
-  // 최신 state를 ref로 유지 (키보드 핸들러에서 클로저 문제 방지)
+    // Supabase는 debounce 500ms
+    if (userId) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        upsertSession(userId, id, 'flashcard', { idx }, completed);
+      }, 500);
+    }
+
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, idx, cards.length, userId]);
+
   const stateRef = useRef({ idx, flipped, cards, rated });
   useEffect(() => { stateRef.current = { idx, flipped, cards, rated }; });
 
-  // 키보드 단축키
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // 입력 필드 포커스 중이면 무시
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
       const { idx: curIdx, flipped: curFlipped, cards: curCards } = stateRef.current;
       switch (e.key) {
@@ -111,8 +133,11 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
     setIdx(0);
     setFlipped(false);
     setRated(new Set());
-    if (id) saveProgress(id, 0);
-  }, [set, id]);
+    if (id) {
+      saveProgress(id, 0);
+      if (userId) upsertSession(userId, id, 'flashcard', { idx: 0 }, false);
+    }
+  }, [set, id, userId]);
 
   const go = (next: number) => {
     const clamped = Math.max(0, Math.min(cards.length - 1, next));
@@ -131,7 +156,11 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
     setFlipped(false);
     setCards([...(set?.cards ?? [])]);
     setRated(new Set());
-    if (id) { saveProgress(id, 0); saveCompleted(id, 'flashcard', false); }
+    if (id) {
+      saveProgress(id, 0);
+      saveCompleted(id, 'flashcard', false);
+      if (userId) upsertSession(userId, id, 'flashcard', { idx: 0 }, false);
+    }
   };
 
   if (!set || cards.length === 0) {
@@ -146,14 +175,11 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
   const card = cards[idx];
   const front = answerWith === 'definition' ? card.term : card.definition;
   const back = answerWith === 'definition' ? card.definition : card.term;
-
-  // 진행도: 현재 위치+1 / 전체 (이어보기 맥락에서 "여기까지 봤다")
   const viewedPct = Math.round(((idx + 1) / cards.length) * 100);
   const ratedPct = Math.round((rated.size / cards.length) * 100);
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/set/${id}`)} style={{ gap: 4 }}>
           <ChevronLeft size={15} /> {set.title}
@@ -171,7 +197,6 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         </div>
       </div>
 
-      {/* Settings panel */}
       {showSettings && (
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>설정</div>
@@ -183,13 +208,11 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         </div>
       )}
 
-      {/* Progress */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-2)', marginBottom: 6 }}>
           <span style={{ fontWeight: 600 }}>{idx + 1} / {cards.length}</span>
           <span>{rated.size > 0 ? `${rated.size}개 평가됨` : '카드를 뒤집어 평가해보세요'}</span>
         </div>
-        {/* 이중 진행바: 열람(파랑) + 평가(초록) */}
         <div className="progress-track" style={{ height: 6, position: 'relative' }}>
           <div className="progress-fill" style={{ width: `${viewedPct}%`, position: 'absolute', inset: 0 }} />
           {rated.size > 0 && (
@@ -198,7 +221,6 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         </div>
       </div>
 
-      {/* Card */}
       <div className="flip-card" style={{ height: card.imageUrl ? 420 : 340, cursor: 'pointer', marginBottom: 20 }} onClick={() => setFlipped(f => !f)}>
         <div className={`flip-inner ${flipped ? 'flipped' : ''}`}>
           <div className="flip-front">
@@ -221,7 +243,6 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         </div>
       </div>
 
-      {/* Nav + rating */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <button className="btn btn-secondary btn-md" onClick={() => go(idx - 1)} disabled={idx === 0}>
           <ChevronLeft size={16} />
@@ -243,7 +264,6 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         </button>
       </div>
 
-      {/* 키보드 단축키 안내 */}
       <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
         {[
           { key: 'Space', desc: '뒤집기' },
@@ -258,7 +278,6 @@ export default function FlashcardPage({ cardSets, onUpdateStat }: FlashcardPageP
         ))}
       </div>
 
-      {/* 마지막 카드 도달 시 */}
       {idx === cards.length - 1 && (
         <div style={{ marginTop: 24, padding: 20, background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)', textAlign: 'center' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>🎉 마지막 카드입니다</div>

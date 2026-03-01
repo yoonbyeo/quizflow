@@ -246,7 +246,7 @@ export function useCardSets(userId: string | undefined) {
   // ── Stats ──
   const upsertCardStat = useCallback(async (cardId: string, isCorrect: boolean) => {
     if (!userId) return;
-    recordStudyActivity(); // 스트릭 + 캘린더 기록
+    recordStudyActivity(userId); // 스트릭 + 캘린더 기록
     const existing = await supabase
       .from('card_stats').select('*').eq('user_id', userId).eq('card_id', cardId).single();
 

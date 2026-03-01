@@ -3,30 +3,28 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Settings } from 'lucide-react';
 import { generateMultipleChoiceQuestion, generateWrittenQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
+import { upsertSession, loadSession } from '../hooks/useStudySync';
 import type { CardSet, TestQuestion, TestConfig } from '../types';
 
-// ── localStorage 헬퍼 ──
+// ── localStorage 헬퍼 (빠른 읽기 / 오프라인 fallback) ──
 function saveTestConfig(setId: string, cfg: TestConfig) {
   try { localStorage.setItem(`qf-testcfg-${setId}`, JSON.stringify(cfg)); } catch {}
 }
 function loadTestConfig(setId: string): TestConfig | null {
   try { const v = localStorage.getItem(`qf-testcfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
-
 export function saveTestProgress(setId: string, idx: number, total: number) {
   try { localStorage.setItem(`qf-testprog-${setId}`, JSON.stringify({ idx, total })); } catch {}
 }
 export function loadTestProgress(setId: string): { idx: number; total: number } | null {
   try { const v = localStorage.getItem(`qf-testprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
-
 export function saveTestCompleted(setId: string, done: boolean) {
   try { localStorage.setItem(`qf-completed-test-${setId}`, done ? '1' : '0'); } catch {}
 }
 export function loadTestCompleted(setId: string): boolean {
   try { return localStorage.getItem(`qf-completed-test-${setId}`) === '1'; } catch { return false; }
 }
-
 interface TestSession {
   questions: TestQuestion[];
   qIdx: number;
@@ -46,6 +44,7 @@ function clearTestSession(setId: string) {
 interface TestPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
+  userId?: string;
 }
 
 const DEFAULT_CONFIG: TestConfig = {
@@ -67,24 +66,21 @@ function buildQuestions(set: { cards: CardSet['cards'] }, config: TestConfig): T
   });
 }
 
-export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
+export default function TestPage({ cardSets, onUpdateStat, userId }: TestPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const set = cardSets.find(s => s.id === id);
   const resume = searchParams.get('resume') === '1';
 
-  // 모드 저장 (훅 밖이 아닌 effect에서)
   useEffect(() => {
     if (id) saveLastMode(id, 'test');
   }, [id]);
 
-  // ── 모든 state를 최상단에 선언 (훅 규칙 준수) ──
   const [config, setConfig] = useState<TestConfig>(() => {
     if (id) { const saved = loadTestConfig(id); if (saved) return saved; }
     return DEFAULT_CONFIG;
   });
-
   const [screen, setScreen] = useState<'config' | 'quiz' | 'result'>(() => resume ? 'quiz' : 'config');
   const [questions, setQuestions] = useState<TestQuestion[]>([]);
   const [qIdx, setQIdx] = useState(0);
@@ -102,35 +98,52 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     if (!resume || !id || !set || set.cards.length < 2 || resumeHandled.current) return;
     resumeHandled.current = true;
 
-    const session = loadTestSession(id);
-    if (session && session.questions.length > 0 && session.qIdx < session.questions.length) {
-      setQuestions(session.questions);
-      setQIdx(session.qIdx);
-      setScore(session.score);
-      setAnswers(session.answers);
-      setSubmitted(false);
-      setSelected(null);
-      setWritten('');
-      setCorrect(false);
-      setScreen('quiz');
-    } else {
-      // 저장된 세션 없으면 설정으로 저장된 config로 새로 시작
-      const cfg = loadTestConfig(id) ?? DEFAULT_CONFIG;
-      const qs = buildQuestions(set, cfg);
-      saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
-      setQuestions(qs);
-      setQIdx(0);
-      setScore(0);
-      setAnswers([]);
-      setSubmitted(false);
-      setSelected(null);
-      setWritten('');
-      setCorrect(false);
-      setScreen('quiz');
-    }
-  }, [resume, id, set]);
+    const applySession = (session: TestSession | null) => {
+      if (session && session.questions.length > 0 && session.qIdx < session.questions.length) {
+        setQuestions(session.questions);
+        setQIdx(session.qIdx);
+        setScore(session.score);
+        setAnswers(session.answers);
+        setSubmitted(false);
+        setSelected(null);
+        setWritten('');
+        setCorrect(false);
+        setScreen('quiz');
+      } else {
+        const cfg = loadTestConfig(id) ?? DEFAULT_CONFIG;
+        const qs = buildQuestions(set, cfg);
+        const newSession = { questions: qs, qIdx: 0, score: 0, answers: [] };
+        saveTestSession(id, newSession);
+        if (userId) upsertSession(userId, id, 'test', { idx: 0, total: qs.length, session: newSession }, false);
+        setQuestions(qs);
+        setQIdx(0);
+        setScore(0);
+        setAnswers([]);
+        setSubmitted(false);
+        setSelected(null);
+        setWritten('');
+        setCorrect(false);
+        setScreen('quiz');
+      }
+    };
 
-  // ── 키보드 단축키 (항상 등록, 내부에서 quiz 여부 확인) ──
+    if (userId) {
+      loadSession(userId, id, 'test').then(cloudSession => {
+        let session: TestSession | null = null;
+        if (cloudSession && !cloudSession.completed && cloudSession.progress.session) {
+          session = cloudSession.progress.session as TestSession;
+          if (id) saveTestSession(id, session); // localStorage 동기화
+        } else {
+          session = loadTestSession(id);
+        }
+        applySession(session);
+      });
+    } else {
+      applySession(loadTestSession(id));
+    }
+  }, [resume, id, set, userId]);
+
+  // ── 키보드 단축키 ──
   const stateRef = useRef({ submitted, correct, selected, written, questions, qIdx, score, answers, screen });
   useEffect(() => {
     stateRef.current = { submitted, correct, selected, written, questions, qIdx, score, answers, screen };
@@ -143,17 +156,13 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     const handler = (e: KeyboardEvent) => {
       const { screen: sc, submitted: sub, questions: qs, qIdx: qi } = stateRef.current;
       if (sc !== 'quiz' || qs.length === 0 || qi >= qs.length) return;
-
       const q = qs[qi];
       const isW = q.type === 'written';
       const target = e.target as HTMLElement;
-
       if (isW && target.tagName === 'INPUT' && e.key === 'Enter' && !sub && stateRef.current.written.trim()) {
-        submitRef.current();
-        return;
+        submitRef.current(); return;
       }
       if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-
       if (e.key === 'Enter') {
         e.preventDefault();
         if (sub) nextRef.current();
@@ -172,12 +181,20 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // ── 함수 정의 ──
+  // ── Supabase 저장 debounce timer ──
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const startQuiz = useCallback(() => {
     if (!set) return;
     if (id) { saveTestConfig(id, config); clearTestSession(id); }
     const qs = buildQuestions(set, config);
-    if (id) saveTestSession(id, { questions: qs, qIdx: 0, score: 0, answers: [] });
+    const session = { questions: qs, qIdx: 0, score: 0, answers: [] };
+    if (id) {
+      saveTestSession(id, session);
+      saveTestProgress(id, 0, qs.length);
+      saveTestCompleted(id, false);
+      if (userId) upsertSession(userId, id, 'test', { idx: 0, total: qs.length, session }, false);
+    }
     setQuestions(qs);
     setQIdx(0);
     setSelected(null);
@@ -187,7 +204,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setScore(0);
     setAnswers([]);
     setScreen('quiz');
-  }, [set, id, config]);
+  }, [set, id, config, userId]);
 
   const resetToConfig = useCallback(() => {
     setScreen('config');
@@ -200,8 +217,12 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setSelected(null);
     setWritten('');
     setCorrect(false);
-    if (id) { saveTestCompleted(id, false); clearTestSession(id); }
-  }, [id]);
+    if (id) {
+      saveTestCompleted(id, false);
+      clearTestSession(id);
+      if (userId) upsertSession(userId, id, 'test', { idx: 0, total: 0, session: null }, false);
+    }
+  }, [id, userId]);
 
   const submit = useCallback(async () => {
     const { submitted: sub, questions: qs, qIdx: qi, score: sc, answers: ans } = stateRef.current;
@@ -219,11 +240,21 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setAnswers(newAnswers);
 
     await onUpdateStat(q.cardId, isCorrect);
+
     if (id) {
-      saveTestProgress(id, qi + 1, qs.length);
-      saveTestSession(id, { questions: qs, qIdx: qi, score: newScore, answers: newAnswers });
+      const newIdx = qi + 1;
+      const session = { questions: qs, qIdx: qi, score: newScore, answers: newAnswers };
+      saveTestProgress(id, newIdx, qs.length);
+      saveTestSession(id, session);
+
+      if (userId) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+          upsertSession(userId, id, 'test', { idx: newIdx, total: qs.length, session }, false);
+        }, 500);
+      }
     }
-  }, [id, onUpdateStat]);
+  }, [id, onUpdateStat, userId]);
 
   const next = useCallback(() => {
     const { questions: qs, qIdx: qi, score: sc, answers: ans } = stateRef.current;
@@ -234,6 +265,7 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
         saveTestProgress(id, qs.length, qs.length);
         saveTestCompleted(id, true);
         clearTestSession(id);
+        if (userId) upsertSession(userId, id, 'test', { idx: qs.length, total: qs.length, session: null }, true);
       }
       return;
     }
@@ -243,14 +275,15 @@ export default function TestPage({ cardSets, onUpdateStat }: TestPageProps) {
     setWritten('');
     setSubmitted(false);
     setCorrect(false);
-    if (id) saveTestSession(id, { questions: qs, qIdx: nextIdx, score: sc, answers: ans });
-  }, [id]);
+    if (id) {
+      const session = { questions: qs, qIdx: nextIdx, score: sc, answers: ans };
+      saveTestSession(id, session);
+    }
+  }, [id, userId]);
 
-  // ref 최신화
   useEffect(() => { submitRef.current = submit; }, [submit]);
   useEffect(() => { nextRef.current = next; }, [next]);
 
-  // ── 렌더링 ──
   if (!set || set.cards.length < 2) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 0' }}>

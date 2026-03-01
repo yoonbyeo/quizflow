@@ -1,48 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw, Brain, AlertCircle } from 'lucide-react';
 import { generateMultipleChoiceQuestion, shuffleArray, checkWrittenAnswer } from '../utils';
 import { saveLastMode } from './FlashcardPage';
 import ImageZoom from '../components/ui/ImageZoom';
+import { upsertSession, loadSession, deleteSession } from '../hooks/useStudySync';
 import type { CardSet, CardStat, TestQuestion } from '../types';
 
-// ── Config 저장/불러오기 ──
+// ── localStorage 헬퍼 (빠른 읽기 / 오프라인 fallback) ──
 function saveLearnConfig(setId: string, cfg: any) {
   try { localStorage.setItem(`qf-learncfg-${setId}`, JSON.stringify(cfg)); } catch {}
 }
 function loadLearnConfig(setId: string): any | null {
   try { const v = localStorage.getItem(`qf-learncfg-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
-
-// ── 진행도 저장/불러오기 (홈 진행도용) ──
 export function saveLearnProgress(setId: string, mastered: number, total: number) {
   try { localStorage.setItem(`qf-learnprog-${setId}`, JSON.stringify({ mastered, total })); } catch {}
 }
 export function loadLearnProgress(setId: string): { mastered: number; total: number } | null {
   try { const v = localStorage.getItem(`qf-learnprog-${setId}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
-
-// ── 완료 여부 ──
 export function saveLearnCompleted(setId: string, done: boolean) {
   try { localStorage.setItem(`qf-completed-learn-${setId}`, done ? '1' : '0'); } catch {}
 }
 export function loadLearnCompleted(setId: string): boolean {
   try { return localStorage.getItem(`qf-completed-learn-${setId}`) === '1'; } catch { return false; }
-}
-
-// ── 세션 상태 저장/불러오기 (이어하기 핵심) ──
-interface LearnSession {
-  screen: 'flash' | 'practice';
-  cardIds: string[];          // sortedCards의 id 순서
-  flashIdx: number;
-  flashResults: boolean[];
-  flashScore: number;
-  practiceCardIds: string[];  // practiceItems의 카드 id 순서
-  practiceTypes: ('mc' | 'written')[];
-  practiceQueue: number[];
-  queuePos: number;
-  masteredSet: number[];      // Set → 배열로 직렬화
-  practiceScore: number;
 }
 function saveLearnSession(setId: string, session: LearnSession) {
   try { localStorage.setItem(`qf-learnsession-${setId}`, JSON.stringify(session)); } catch {}
@@ -54,9 +36,24 @@ function clearLearnSession(setId: string) {
   try { localStorage.removeItem(`qf-learnsession-${setId}`); } catch {}
 }
 
+interface LearnSession {
+  screen: 'flash' | 'practice';
+  cardIds: string[];
+  flashIdx: number;
+  flashResults: boolean[];
+  flashScore: number;
+  practiceCardIds: string[];
+  practiceTypes: ('mc' | 'written')[];
+  practiceQueue: number[];
+  queuePos: number;
+  masteredSet: number[];
+  practiceScore: number;
+}
+
 interface LearnPageProps {
   cardSets: CardSet[];
   onUpdateStat: (cardId: string, isCorrect: boolean) => Promise<void>;
+  userId?: string;
 }
 
 type Screen = 'config' | 'flash' | 'practice' | 'result';
@@ -73,7 +70,7 @@ interface PracticeItem {
   mcQuestion: TestQuestion | null;
 }
 
-export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
+export default function LearnPage({ cardSets, onUpdateStat, userId }: LearnPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,17 +85,14 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   });
   const [screen, setScreen] = useState<Screen>('config');
   const [sortedCards, setSortedCards] = useState<CardSet['cards']>([]);
-
   const [flashIdx, setFlashIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [flashResults, setFlashResults] = useState<boolean[]>([]);
   const [flashScore, setFlashScore] = useState(0);
-
   const [practiceItems, setPracticeItems] = useState<PracticeItem[]>([]);
   const [practiceQueue, setPracticeQueue] = useState<number[]>([]);
   const [queuePos, setQueuePos] = useState(0);
   const [masteredSet, setMasteredSet] = useState<Set<number>>(new Set());
-
   const [selected, setSelected] = useState<string | null>(null);
   const [written, setWritten] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -143,7 +137,8 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     });
   };
 
-  // ── 세션 저장 (flash/practice 상태 변경마다) ──
+  // ── 세션 저장 (debounce 500ms) ──
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!id || screen === 'config' || screen === 'result') return;
     if (sortedCards.length === 0) return;
@@ -163,13 +158,25 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     };
     saveLearnSession(id, session);
 
-    // 홈 진행도 저장
     const progressMastered = screen === 'flash' ? flashIdx : masteredSet.size;
     saveLearnProgress(id, progressMastered, sortedCards.length);
+
+    if (userId) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        upsertSession(userId, id, 'learn', {
+          mastered: progressMastered,
+          total: sortedCards.length,
+          session,
+        }, false);
+      }, 500);
+    }
+
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, flashIdx, masteredSet, queuePos, practiceQueue]);
 
-  // ── resume=1: set이 준비되면 이전 세션 복원 ──
+  // ── resume=1: 이전 세션 복원 ──
   const [resumed, setResumed] = useState(false);
   useEffect(() => {
     if (!resume || resumed || !set || set.cards.length === 0) return;
@@ -179,67 +186,79 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       { includeFlashcard: true, includeMultipleChoice: true, includeWritten: true };
     setConfig(cfg);
 
-    // 저장된 세션이 있으면 그 상태에서 복원
-    const session = id ? loadLearnSession(id) : null;
-    if (session) {
-      // 카드 ID → 실제 카드 객체 복원
-      const cardMap = Object.fromEntries(set.cards.map(c => [c.id, c]));
-      const restoredSorted = session.cardIds.map(cid => cardMap[cid]).filter(Boolean) as CardSet['cards'];
-
-      if (restoredSorted.length > 0) {
-        setSortedCards(restoredSorted);
-        setFlashIdx(session.flashIdx);
-        setFlashResults(session.flashResults);
-        setFlashScore(session.flashScore);
-        setQueuePos(session.queuePos);
-        setPracticeQueue(session.practiceQueue);
-        setMasteredSet(new Set(session.masteredSet));
-        setPracticeScore(session.practiceScore);
-        setFlipped(false);
-        setSubmitted(false);
-        setSelected(null);
-        setWritten('');
-
-        if (session.screen === 'practice' && session.practiceCardIds.length > 0) {
-          const restoredItems: PracticeItem[] = session.practiceCardIds.map((cid, i) => {
-            const card = cardMap[cid];
-            const type = session.practiceTypes[i] ?? 'written';
-            return {
-              card,
-              type,
-              mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null,
-            };
-          }).filter(p => p.card != null);
-          setPracticeItems(restoredItems);
-          setScreen('practice');
-        } else {
-          setScreen(session.screen);
+    const restoreSession = (session: LearnSession | null) => {
+      if (session) {
+        const cardMap = Object.fromEntries(set.cards.map(c => [c.id, c]));
+        const restoredSorted = session.cardIds.map(cid => cardMap[cid]).filter(Boolean) as CardSet['cards'];
+        if (restoredSorted.length > 0) {
+          setSortedCards(restoredSorted);
+          setFlashIdx(session.flashIdx);
+          setFlashResults(session.flashResults);
+          setFlashScore(session.flashScore);
+          setQueuePos(session.queuePos);
+          setPracticeQueue(session.practiceQueue);
+          setMasteredSet(new Set(session.masteredSet));
+          setPracticeScore(session.practiceScore);
+          setFlipped(false);
+          setSubmitted(false);
+          setSelected(null);
+          setWritten('');
+          if (session.screen === 'practice' && session.practiceCardIds.length > 0) {
+            const restoredItems: PracticeItem[] = session.practiceCardIds.map((cid, i) => {
+              const card = cardMap[cid];
+              const type = session.practiceTypes[i] ?? 'written';
+              return { card, type, mcQuestion: type === 'mc' ? generateMultipleChoiceQuestion(card, set.cards) : null };
+            }).filter(p => p.card != null);
+            setPracticeItems(restoredItems);
+            setScreen('practice');
+          } else {
+            setScreen(session.screen);
+          }
+          return true;
         }
-        return;
       }
-    }
+      return false;
+    };
 
-    // 세션 없으면 처음부터 시작
-    const cards = buildSorted();
-    setSortedCards(cards);
-    setFlashResults([]);
-    setFlashScore(0);
-    setPracticeScore(0);
-    setFlipped(false);
-    setFlashIdx(0);
-    setSubmitted(false);
-    setSelected(null);
-    setWritten('');
-    setMasteredSet(new Set());
+    const startFresh = () => {
+      const cards = buildSorted();
+      setSortedCards(cards);
+      setFlashResults([]);
+      setFlashScore(0);
+      setPracticeScore(0);
+      setFlipped(false);
+      setFlashIdx(0);
+      setSubmitted(false);
+      setSelected(null);
+      setWritten('');
+      setMasteredSet(new Set());
+      if (cfg.includeFlashcard) {
+        setScreen('flash');
+      } else {
+        const items = buildPracticeItems(cards, cfg);
+        setPracticeItems(items);
+        setPracticeQueue(items.map((_, i) => i));
+        setQueuePos(0);
+        setScreen('practice');
+      }
+    };
 
-    if (cfg.includeFlashcard) {
-      setScreen('flash');
+    // Supabase 우선, localStorage fallback
+    if (userId && id) {
+      loadSession(userId, id, 'learn').then(cloudSession => {
+        let session: LearnSession | null = null;
+        if (cloudSession && !cloudSession.completed && cloudSession.progress.session) {
+          session = cloudSession.progress.session as LearnSession;
+          // localStorage도 동기화
+          if (id) saveLearnSession(id, session);
+        } else {
+          session = id ? loadLearnSession(id) : null;
+        }
+        if (!restoreSession(session)) startFresh();
+      });
     } else {
-      const items = buildPracticeItems(cards, cfg);
-      setPracticeItems(items);
-      setPracticeQueue(items.map((_, i) => i));
-      setQueuePos(0);
-      setScreen('practice');
+      const session = id ? loadLearnSession(id) : null;
+      if (!restoreSession(session)) startFresh();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [set, resume]);
@@ -249,6 +268,7 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
       saveLearnConfig(id, config);
       saveLearnCompleted(id, false);
       clearLearnSession(id);
+      if (userId) upsertSession(userId, id, 'learn', { mastered: 0, total: set.cards.length, session: null }, false);
     }
     const cards = buildSorted();
     setSortedCards(cards);
@@ -261,7 +281,6 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
     setSelected(null);
     setWritten('');
     setMasteredSet(new Set());
-
     if (config.includeFlashcard) {
       setScreen('flash');
     } else {
@@ -275,7 +294,11 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
 
   const goToPractice = (cards: CardSet['cards']) => {
     if (!config.includeMultipleChoice && !config.includeWritten) {
-      if (id) { saveLearnCompleted(id, true); clearLearnSession(id); }
+      if (id) {
+        saveLearnCompleted(id, true);
+        clearLearnSession(id);
+        if (userId) upsertSession(userId, id, 'learn', { mastered: cards.length, total: cards.length, session: null }, true);
+      }
       setScreen('result');
       return;
     }
@@ -416,7 +439,15 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
   if (screen === 'practice') {
     const currentItemIdx = practiceQueue[queuePos];
     if (currentItemIdx === undefined) {
-      if (id) { saveLearnCompleted(id, true); clearLearnSession(id); }
+      if (id) {
+        saveLearnCompleted(id, true);
+        clearLearnSession(id);
+        if (userId) {
+          const t = sortedCards.length;
+          upsertSession(userId, id, 'learn', { mastered: t, total: t, session: null }, true);
+          deleteSession(userId, id, 'learn');
+        }
+      }
       setScreen('result');
       return null;
     }
@@ -582,7 +613,13 @@ export default function LearnPage({ cardSets, onUpdateStat }: LearnPageProps) {
           <div className="stat-card"><div className="stat-value" style={{ color: avgPct >= 70 ? 'var(--green)' : 'var(--yellow)', fontSize: 22 }}>{avgPct}%</div><div className="stat-label">종합</div></div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button className="btn btn-secondary btn-md" onClick={() => { if (id) clearLearnSession(id); setScreen('config'); }}><RotateCcw size={15} /> 다시</button>
+          <button className="btn btn-secondary btn-md" onClick={() => {
+            if (id) {
+              clearLearnSession(id);
+              if (userId) upsertSession(userId, id, 'learn', { mastered: 0, total: set.cards.length, session: null }, false);
+            }
+            setScreen('config');
+          }}><RotateCcw size={15} /> 다시</button>
           <button className="btn btn-primary btn-md" onClick={() => navigate(`/set/${id}`)}>세트로</button>
         </div>
       </div>

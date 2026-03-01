@@ -57,20 +57,20 @@ function AppContent() {
           <AuthGuard>
             <Layout user={user} cardSets={cardSets} folders={folders}>
               <Routes>
-                <Route path="/" element={<HomePage cardSets={cardSets} folders={folders} loading={setsLoading} />} />
+                <Route path="/" element={<HomePage cardSets={cardSets} folders={folders} loading={setsLoading} userId={user?.id} />} />
                 <Route path="/library" element={<LibraryPage cardSets={cardSets} folders={folders} onDelete={deleteCardSet} onDuplicate={duplicateCardSet} />} />
                 <Route path="/folders" element={<FoldersPage cardSets={cardSets} folders={folders} onCreate={createFolder} onUpdate={updateFolder} onDelete={deleteFolder} onMoveSet={updateCardSet} />} />
                 <Route path="/create" element={<CreateSetPage onCreate={createCardSet} folders={folders} onUploadImage={uploadCardImage} />} />
                 <Route path="/edit/:id" element={<EditSetPage cardSets={cardSets} folders={folders} onUpdateSet={updateCardSet} onAddCard={addCard} onUpdateCard={updateCard} onDeleteCard={deleteCard} onSaveCards={saveCardsForSet} onUploadImage={uploadCardImage} />} />
                 <Route path="/set/:id" element={<SetDetailPage cardSets={cardSets} onResetStats={resetStats} />} />
-                <Route path="/flashcard/:id" element={<FlashcardPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
-                <Route path="/test/:id" element={<TestPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
+                <Route path="/flashcard/:id" element={<FlashcardPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
+                <Route path="/test/:id" element={<TestPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
                 <Route path="/match/:id" element={<MatchPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
                 <Route path="/write/:id" element={<WritePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
-                <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
-                <Route path="/stats" element={<StatsPage cardSets={cardSets} />} />
+                <Route path="/learn/:id" element={<LearnPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
+                <Route path="/stats" element={<StatsPage cardSets={cardSets} userId={user?.id} />} />
                 <Route path="/wrong-note" element={<WrongNotePage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
-                <Route path="/review" element={<ReviewPage cardSets={cardSets} onUpdateStat={upsertCardStat} />} />
+                <Route path="/review" element={<ReviewPage cardSets={cardSets} onUpdateStat={upsertCardStat} userId={user?.id} />} />
                 <Route path="/profile" element={<ProfilePage user={user} />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/help" element={<HelpPage />} />

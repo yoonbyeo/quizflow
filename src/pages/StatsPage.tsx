@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, TrendingUp, BookOpen, Zap, Target, Flame, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { loadStreak } from '../utils/streak';
+import { loadCalendarMonth } from '../hooks/useStudySync';
 import InfoTooltip from '../components/ui/InfoTooltip';
 import type { CardSet, CardStat } from '../types';
 
 interface StatsPageProps {
   cardSets: CardSet[];
+  userId?: string;
 }
 
 const KEY_CALENDAR_PREFIX = 'qf-cal-';
 
-function getCalCount(dateStr: string): number {
+function getCalCountLocal(dateStr: string): number {
   try {
     return parseInt(localStorage.getItem(KEY_CALENDAR_PREFIX + dateStr) ?? '0', 10);
   } catch { return 0; }
@@ -36,23 +38,42 @@ function getPurpleColor(count: number, max: number): string {
 }
 
 // ── 학습 캘린더 컴포넌트 ──
-function StudyCalendar() {
+function StudyCalendar({ userId }: { userId?: string }) {
   const today = new Date();
   const streak = loadStreak();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [tooltip, setTooltip] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
+  const [cloudCal, setCloudCal] = useState<Record<string, number>>({});
 
   const todayStr = today.toISOString().slice(0, 10);
   const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   const MONTH_NAMES = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+  // Supabase 캘린더 데이터 로드
+  useEffect(() => {
+    if (!userId) return;
+    loadCalendarMonth(userId, viewYear, viewMonth).then(data => {
+      // localStorage 데이터와 병합 (둘 중 큰 값 사용)
+      const merged: Record<string, number> = { ...data };
+      const daysInM = new Date(viewYear, viewMonth + 1, 0).getDate();
+      for (let d = 1; d <= daysInM; d++) {
+        const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const local = getCalCountLocal(ds);
+        merged[ds] = Math.max(merged[ds] ?? 0, local);
+      }
+      setCloudCal(merged);
+    });
+  }, [userId, viewYear, viewMonth]);
 
   // 해당 월 날짜 데이터
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const monthData: { date: string; count: number; day: number }[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    monthData.push({ date: ds, count: getCalCount(ds), day: d });
+    const local = getCalCountLocal(ds);
+    const cloud = cloudCal[ds] ?? 0;
+    monthData.push({ date: ds, count: Math.max(local, cloud), day: d });
   }
 
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -82,7 +103,8 @@ function StudyCalendar() {
     const dim = new Date(y, m + 1, 0).getDate();
     let total = 0;
     for (let d = 1; d <= dim; d++) {
-      total += getCalCount(`${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+      const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      total += Math.max(getCalCountLocal(ds), cloudCal[ds] ?? 0);
     }
     recentMonths.push({ label: MONTH_NAMES[m], count: total, monthIdx: m });
   }
@@ -279,7 +301,7 @@ function StudyCalendar() {
   );
 }
 
-export default function StatsPage({ cardSets }: StatsPageProps) {
+export default function StatsPage({ cardSets, userId }: StatsPageProps) {
   const navigate = useNavigate();
 
   const allStats = cardSets.flatMap(s => Object.values(s.studyStats?.cardStats ?? {}) as CardStat[]);
@@ -329,7 +351,7 @@ export default function StatsPage({ cardSets }: StatsPageProps) {
       </div>
 
       {/* 학습 캘린더 */}
-      <StudyCalendar />
+      <StudyCalendar userId={userId} />
 
       {/* Mastery breakdown */}
       {studied > 0 && (
