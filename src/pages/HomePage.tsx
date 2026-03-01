@@ -161,7 +161,8 @@ export default function HomePage({ cardSets, loading }: HomePageProps) {
       if (lastMode === 'flashcard') return !loadCompleted(s.id, 'flashcard');
       if (lastMode === 'test') return !loadTestCompleted(s.id);
       if (lastMode === 'learn') return !loadLearnCompleted(s.id);
-      return true; // match, write는 완료 추적 없음 — 항상 표시
+      if (lastMode === 'match') return false; // 카드 맞추기는 이어하기 제외
+      return true; // write만 표시
     })
     .sort((a, b) => (b.studyStats?.lastStudied ?? 0) - (a.studyStats?.lastStudied ?? 0))
     .slice(0, 2);
